@@ -134,6 +134,7 @@ html, body, #root {
   outline: none;
   box-sizing: border-box;
   background: white;
+  color: var(--text-main); /* Fixed: Ensure text is dark and legible */
   transition: all 0.2s;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
@@ -246,6 +247,7 @@ html, body, #root {
   border: 1px solid var(--border);
   font-size: 16px;
   background: #fcfcfc;
+  color: var(--text-main); /* Fixed: Legible text color */
   outline: none;
   transition: all 0.2s;
   margin-bottom: 12px;
@@ -258,6 +260,7 @@ html, body, #root {
   border: 1px solid var(--border);
   font-size: 16px;
   background: #fcfcfc;
+  color: var(--text-main); /* Fixed: Legible text color */
   outline: none;
   transition: all 0.2s;
   min-height: 120px;
