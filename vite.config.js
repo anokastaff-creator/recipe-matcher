@@ -4,5 +4,6 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/', // Explicitly tells Vite to build for the root domain, fixing the path issue
+  // Use './' (relative path) to ensure assets load correctly on BOTH Vercel (root) and GitHub Pages (subpath)
+  base: './', 
 })
