@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
-  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2
+  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, ShieldCheck
 } from 'lucide-react';
 
 // Firebase Imports
@@ -151,33 +151,6 @@ const toTitleCase = (str) => {
   return String(str).toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
-const fetchWithRetry = async (url, options, logFn, maxRetries = 5) => {
-  let lastError = null;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      logFn(`Attempt ${i + 1}/${maxRetries}: sending request...`);
-      const response = await fetch(url, options);
-      if (response.ok) {
-        logFn(`Success: HTTP ${response.status}`);
-        return response;
-      }
-      const errorText = await response.text();
-      const errorMsg = `HTTP ${response.status}: ${errorText.substring(0, 150)}...`;
-      logFn(`Fail: ${errorMsg}`);
-      lastError = errorMsg;
-    } catch (err) {
-      logFn(`Network Error: ${err.message}`);
-      lastError = err.message;
-    }
-    if (i < maxRetries - 1) {
-      const delay = Math.pow(2, i) * 1000;
-      logFn(`Retrying in ${delay}ms...`);
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
-  throw new Error(lastError || "Connection failed.");
-};
-
 const parseAndSanitizeAIJSON = (text) => {
   try {
     return JSON.parse(text);
@@ -274,7 +247,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.15");
+    console.log("App Mounted - v2.9.14");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -307,7 +280,7 @@ const App = () => {
   const addLog = (msg) => {
     const time = new Date().toLocaleTimeString();
     setDebugLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 30));
-    console.log(`[RecipeMatcher] ${msg}`); // Also log to console for robust debugging
+    console.log(`[RecipeMatcher] ${msg}`); 
   };
 
   const getSafeUid = (u) => String(u?.uid || 'guest').replace(/\//g, '_');
@@ -1509,7 +1482,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.12</p>
+            <p className="text-xs text-muted font-mono">v2.9.14</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1663,7 +1636,15 @@ const App = () => {
       {activeTab === 'logs' && (
         <div className="space-y-4">
         <div className="card text-[11px] font-mono">
-        <div className="flex justify-between items-center mb-4"><div className="font-black text-xs text-primary uppercase">Forensic Trace</div><button onClick={() => window.location.reload()}><RefreshCw size={12}/></button></div>
+        <div className="flex justify-between items-center mb-4"><div className="font-black text-xs text-primary uppercase">System Status</div><button onClick={() => window.location.reload()}><RefreshCw size={12}/></button></div>
+        <div className="grid grid-cols-2 gap-2 mb-4 border-b border-border pb-4">
+          <div><span className="text-muted">App ID:</span> {appId}</div>
+          <div><span className="text-muted">User ID:</span> {user ? user.uid.substring(0,8) + '...' : 'None'}</div>
+          <div><span className="text-muted">Recipes:</span> {recipes ? recipes.length : 0}</div>
+          <div><span className="text-muted">Auth:</span> {user?.isAnonymous ? 'Anon' : 'Google/Email'}</div>
+        </div>
+
+        <div className="font-black text-xs text-primary uppercase mb-2">Event Log</div>
         {debugLogs.map((log, i) => <div key={i} className="py-1 border-b border-border/20">{log}</div>)}
         </div>
         </div>
