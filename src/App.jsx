@@ -269,7 +269,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.6");
+    console.log("App Mounted - v2.9.7");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -459,6 +459,7 @@ const App = () => {
       color: var(--text);
       outline: none;
       transition: 0.2s;
+      margin: 0; /* Reset margins */
     }
     .modal-input:focus { border-color: var(--primary); background: var(--card); }
 
@@ -560,6 +561,33 @@ const App = () => {
         display: flex; align-items: center; justify-content: center;
         border-radius: 8px; border: none; cursor: pointer;
     }
+
+    /* Flex Utilities for non-Tailwind setups */
+    .edit-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 12px;
+      width: 100%;
+    }
+    .edit-group {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-mini {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      border: none;
+      display: flex; align-items: center;
+    }
+    
+    /* Explicit Color Classes */
+    .bg-red-500 { background-color: #ef4444; color: white; }
+    .bg-slate-500 { background-color: #64748b; color: white; }
+    .bg-green-600 { background-color: #16a34a; color: white; }
 
     @media (min-width: 640px) {
       .columns-container { grid-template-columns: 1fr 1fr 1fr; }
@@ -1315,7 +1343,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.6</p>
+            <p className="text-xs text-muted font-mono">v2.9.7</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1339,11 +1367,11 @@ const App = () => {
                 onChange={e => setEditRecipeForm({...editRecipeForm, instructions: e.target.value})}
                 placeholder="Instructions"
               />
-              <div className="flex items-center justify-between mt-2">
+              <div className="edit-row">
                 <button className="btn-icon-sm bg-red-500 hover:bg-red-600" onClick={() => setDeleteConfirmation({ id: recipe.id, name: recipe.name, collection: 'recipes' })} title="Delete Recipe"><Trash2 size={16} color="white"/></button>
-                <div className="flex gap-2">
-                  <button className="btn-action btn-sm bg-slate-500 hover:bg-slate-600 !py-1.5 !px-3 h-8" onClick={() => setEditingRecipeId(null)} style={{padding: '6px 12px', fontSize: '12px'}}>Cancel</button>
-                  <button className="btn-action btn-sm bg-green-600 hover:bg-green-700 !py-1.5 !px-3 h-8" onClick={saveEditedRecipe} style={{padding: '6px 12px', fontSize: '12px'}}>Save</button>
+                <div className="edit-group">
+                  <button className="btn-mini bg-slate-500 hover:bg-slate-600" onClick={() => setEditingRecipeId(null)}>Cancel</button>
+                  <button className="btn-mini bg-green-600 hover:bg-green-700" onClick={saveEditedRecipe}>Save</button>
                 </div>
               </div>
               </div>
