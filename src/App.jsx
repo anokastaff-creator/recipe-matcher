@@ -242,7 +242,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.4");
+    console.log("App Mounted - v2.9.5");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -1042,14 +1042,27 @@ const App = () => {
             const recipeData = await getRecipeFromImage(base64);
             
             if (recipeData) {
-               await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
+               addLog(`AI processed. Saving ${recipeData.name}...`); // Debug log
+
+               // Race addDoc against a 5s timeout to prevent hanging
+               const savePromise = addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
                 name: recipeData.name,
                 ingredients: recipeData.ingredients,
                 instructions: recipeData.instructions,
                 source: "AI Batch Scan",
                 createdAt: Date.now()
               });
-              addLog(`Success: ${recipeData.name}`);
+
+              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Save timeout")), 5000));
+
+              try {
+                await Promise.race([savePromise, timeoutPromise]);
+                addLog(`Saved: ${recipeData.name}`);
+              } catch (saveErr) {
+                 // If it times out or fails, we assume it might have queued locally or failed.
+                 // We log and continue so the batch doesn't die.
+                 addLog(`Save warning: ${saveErr.message} (might be queued offline)`);
+              }
             } else {
               addLog(`Failed: File ${i + 1} returned no data.`);
             }
@@ -1151,7 +1164,7 @@ const App = () => {
             <p className="text-sm text-muted mt-1">Sign in to sync your pantry</p>
           </div>
 
-          <form onSubmit={handleEmailAuth} className="w-full flex flex-col gap-6">
+          <form onSubmit={handleEmailAuth} className="w-full flex flex-col gap-5">
             {authMode === 'signup' && (
                <input 
                  className="modal-input" 
@@ -1275,7 +1288,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.4</p>
+            <p className="text-xs text-muted font-mono">v2.9.5</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
