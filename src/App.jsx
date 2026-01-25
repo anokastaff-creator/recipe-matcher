@@ -242,7 +242,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.3");
+    console.log("App Mounted - v2.9.4");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -251,6 +251,7 @@ const App = () => {
   const addLog = (msg) => {
     const time = new Date().toLocaleTimeString();
     setDebugLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 30));
+    console.log(`[RecipeMatcher] ${msg}`); // Also log to console for robust debugging
   };
 
   const getSafeUid = (u) => String(u?.uid || 'guest').replace(/\//g, '_');
@@ -991,6 +992,11 @@ const App = () => {
       if (files.length === 1) {
         // Single File - Load into Editor (Existing Logic)
         const reader = new FileReader();
+        // Add error handling to single file reader
+        reader.onerror = () => {
+             addLog("Error reading file");
+             setIsAnalyzing(false);
+        };
         reader.onloadend = async () => {
           setIsAnalyzing(true);
           try {
@@ -1016,14 +1022,18 @@ const App = () => {
         setBatchProgress({ current: 0, total: files.length });
         setIsAnalyzing(true);
         
-        for (let i = 0; i < files.length; i++) {
-          setBatchProgress({ current: i + 1, total: files.length });
-          addLog(`Processing file ${i + 1} of ${files.length}...`);
+        // Make a stable copy of files to avoid closure issues
+        const filesToProcess = [...files];
+
+        for (let i = 0; i < filesToProcess.length; i++) {
+          setBatchProgress({ current: i + 1, total: filesToProcess.length });
+          addLog(`Processing file ${i + 1} of ${filesToProcess.length}...`);
           try {
-            const base64 = await new Promise((resolve) => {
+            const base64 = await new Promise((resolve, reject) => {
               const reader = new FileReader();
               reader.onloadend = () => resolve(reader.result.split(',')[1]);
-              reader.readAsDataURL(files[i]);
+              reader.onerror = reject;
+              reader.readAsDataURL(filesToProcess[i]);
             });
             
             // Add slight delay to prevent rate limits
@@ -1265,7 +1275,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.3</p>
+            <p className="text-xs text-muted font-mono">v2.9.4</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
