@@ -274,7 +274,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.14");
+    console.log("App Mounted - v2.9.15");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -1306,7 +1306,7 @@ const App = () => {
       <div className={`app-container ${theme}`}>
       <div className="fixed-background"></div>
       {/* Background Image */}
-      <img src="/image.jpg" alt="" className="bg-bottom-right" />
+      <img src="/mechef.png" alt="" className="bg-bottom-right" />
 
       {/* Full Window Recipe View */}
       {fullScreenRecipe && (
@@ -1509,7 +1509,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.11</p>
+            <p className="text-xs text-muted font-mono">v2.9.12</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
