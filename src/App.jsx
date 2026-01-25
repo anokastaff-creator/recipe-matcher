@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
-  Camera, Link as LinkIcon, Layers, Key
+  Camera, Link as LinkIcon, Layers, Bug, Key
 } from 'lucide-react';
 
 // Firebase Imports
@@ -151,6 +151,33 @@ const toTitleCase = (str) => {
   return String(str).toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
+const fetchWithRetry = async (url, options, logFn, maxRetries = 5) => {
+  let lastError = null;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      logFn(`Attempt ${i + 1}/${maxRetries}: sending request...`);
+      const response = await fetch(url, options);
+      if (response.ok) {
+        logFn(`Success: HTTP ${response.status}`);
+        return response;
+      }
+      const errorText = await response.text();
+      const errorMsg = `HTTP ${response.status}: ${errorText.substring(0, 150)}...`;
+      logFn(`Fail: ${errorMsg}`);
+      lastError = errorMsg;
+    } catch (err) {
+      logFn(`Network Error: ${err.message}`);
+      lastError = err.message;
+    }
+    if (i < maxRetries - 1) {
+      const delay = Math.pow(2, i) * 1000;
+      logFn(`Retrying in ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error(lastError || "Connection failed.");
+};
+
 const parseAndSanitizeAIJSON = (text) => {
   try {
     return JSON.parse(text);
@@ -242,7 +269,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.5");
+    console.log("App Mounted - v2.9.6");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -1164,7 +1191,7 @@ const App = () => {
             <p className="text-sm text-muted mt-1">Sign in to sync your pantry</p>
           </div>
 
-          <form onSubmit={handleEmailAuth} className="w-full flex flex-col gap-5">
+          <form onSubmit={handleEmailAuth} className="w-full flex flex-col gap-6">
             {authMode === 'signup' && (
                <input 
                  className="modal-input" 
@@ -1288,7 +1315,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.5</p>
+            <p className="text-xs text-muted font-mono">v2.9.6</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1312,10 +1339,12 @@ const App = () => {
                 onChange={e => setEditRecipeForm({...editRecipeForm, instructions: e.target.value})}
                 placeholder="Instructions"
               />
-              <div className="flex gap-2">
-              <button className="btn-action btn-sm bg-green-600" onClick={saveEditedRecipe}>Save</button>
-              <button className="btn-action btn-sm bg-slate-500" onClick={() => setEditingRecipeId(null)}>Cancel</button>
-              <button className="btn-icon-sm bg-red-500 ml-auto" onClick={() => setDeleteConfirmation({ id: recipe.id, name: recipe.name, collection: 'recipes' })}><Trash2 size={16} color="white"/></button>
+              <div className="flex items-center justify-between mt-2">
+                <button className="btn-icon-sm bg-red-500 hover:bg-red-600" onClick={() => setDeleteConfirmation({ id: recipe.id, name: recipe.name, collection: 'recipes' })} title="Delete Recipe"><Trash2 size={16} color="white"/></button>
+                <div className="flex gap-2">
+                  <button className="btn-action btn-sm bg-slate-500 hover:bg-slate-600 !py-1.5 !px-3 h-8" onClick={() => setEditingRecipeId(null)} style={{padding: '6px 12px', fontSize: '12px'}}>Cancel</button>
+                  <button className="btn-action btn-sm bg-green-600 hover:bg-green-700 !py-1.5 !px-3 h-8" onClick={saveEditedRecipe} style={{padding: '6px 12px', fontSize: '12px'}}>Save</button>
+                </div>
               </div>
               </div>
             ) : (
