@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
-  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2
+  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff
 } from 'lucide-react';
 
 // Firebase Imports
@@ -15,7 +15,8 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore, collection, doc, onSnapshot, updateDoc,
-  deleteDoc, addDoc, setDoc, enableIndexedDbPersistence
+  deleteDoc, addDoc, setDoc, enableIndexedDbPersistence,
+  disableNetwork, enableNetwork
 } from 'firebase/firestore';
 
 /**
@@ -55,7 +56,9 @@ const initializeFirebase = () => {
     if (!getApps().length) {
       app = initializeApp(firebaseConfig);
       db = getFirestore(app);
-      enableIndexedDbPersistence(db).catch(() => {});
+      enableIndexedDbPersistence(db).catch((err) => {
+          console.warn("Persistence failed (common in private/incognito windows):", err.code);
+      });
     } else {
       app = getApp();
       db = getFirestore(app);
@@ -149,33 +152,6 @@ const CATEGORY_TABS = Object.keys(MASTER_INGREDIENTS);
 const toTitleCase = (str) => {
   if (!str) return "";
   return String(str).toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-};
-
-const fetchWithRetry = async (url, options, logFn, maxRetries = 5) => {
-  let lastError = null;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      logFn(`Attempt ${i + 1}/${maxRetries}: sending request...`);
-      const response = await fetch(url, options);
-      if (response.ok) {
-        logFn(`Success: HTTP ${response.status}`);
-        return response;
-      }
-      const errorText = await response.text();
-      const errorMsg = `HTTP ${response.status}: ${errorText.substring(0, 150)}...`;
-      logFn(`Fail: ${errorMsg}`);
-      lastError = errorMsg;
-    } catch (err) {
-      logFn(`Network Error: ${err.message}`);
-      lastError = err.message;
-    }
-    if (i < maxRetries - 1) {
-      const delay = Math.pow(2, i) * 1000;
-      logFn(`Retrying in ${delay}ms...`);
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
-  throw new Error(lastError || "Connection failed.");
 };
 
 const parseAndSanitizeAIJSON = (text) => {
@@ -274,7 +250,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.15");
+    console.log("App Mounted - v2.9.16");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -1303,6 +1279,18 @@ const App = () => {
       catch (e) { addLog(e.message); }
     };
 
+    // Manual Reconnect for Mobile Debugging
+    const handleReconnect = async () => {
+      try {
+        await disableNetwork(fb.db);
+        await new Promise(r => setTimeout(r, 500));
+        await enableNetwork(fb.db);
+        addLog("Reconnected to database.");
+      } catch (e) {
+        addLog("Reconnect failed: " + e.message);
+      }
+    };
+
     if (isLoading) return <div className="app-container dark" style={{justifyContent:'center', display:'flex', alignItems:'center'}}><Loader2 className="animate-spin text-orange-500 mx-auto mb-4" size={56}/></div>;
 
     return (
@@ -1512,7 +1500,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.15</p>
+            <p className="text-xs text-muted font-mono">v2.9.16</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1666,7 +1654,12 @@ const App = () => {
       {activeTab === 'logs' && (
         <div className="space-y-4">
         <div className="card text-[11px] font-mono">
-        <div className="flex justify-between items-center mb-4"><div className="font-black text-xs text-primary uppercase">System Status</div><button onClick={() => window.location.reload()}><RefreshCw size={12}/></button></div>
+        <div className="flex justify-between items-center mb-4"><div className="font-black text-xs text-primary uppercase">System Status</div>
+        <div className="flex gap-2">
+            <button onClick={handleReconnect} title="Force Reconnect Database"><WifiOff size={12} className="text-red-500"/></button>
+            <button onClick={() => window.location.reload()}><RefreshCw size={12}/></button>
+        </div>
+        </div>
         <div className="grid grid-cols-2 gap-2 mb-4 border-b border-border pb-4">
           <div><span className="text-muted">App ID:</span> {appId}</div>
           <div><span className="text-muted">User ID:</span> <span className="text-[10px] break-all">{user ? user.uid : 'None'}</span></div>
