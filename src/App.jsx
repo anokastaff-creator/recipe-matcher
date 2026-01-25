@@ -151,33 +151,6 @@ const toTitleCase = (str) => {
   return String(str).toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
-const fetchWithRetry = async (url, options, logFn, maxRetries = 5) => {
-  let lastError = null;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      logFn(`Attempt ${i + 1}/${maxRetries}: sending request...`);
-      const response = await fetch(url, options);
-      if (response.ok) {
-        logFn(`Success: HTTP ${response.status}`);
-        return response;
-      }
-      const errorText = await response.text();
-      const errorMsg = `HTTP ${response.status}: ${errorText.substring(0, 150)}...`;
-      logFn(`Fail: ${errorMsg}`);
-      lastError = errorMsg;
-    } catch (err) {
-      logFn(`Network Error: ${err.message}`);
-      lastError = err.message;
-    }
-    if (i < maxRetries - 1) {
-      const delay = Math.pow(2, i) * 1000;
-      logFn(`Retrying in ${delay}ms...`);
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
-  throw new Error(lastError || "Connection failed.");
-};
-
 const parseAndSanitizeAIJSON = (text) => {
   try {
     return JSON.parse(text);
@@ -269,7 +242,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.2");
+    console.log("App Mounted - v2.9.3");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -450,7 +423,6 @@ const App = () => {
     /* Independent Modal Styles (No conflicts) */
     .modal-input { 
       width: 100%;
-      max-width: 100%; /* Ensure fits within flex column */
       padding: 8px 12px; /* Decreased internal padding */
       font-size: 14px;
       border-radius: 8px;
@@ -459,7 +431,6 @@ const App = () => {
       color: var(--text);
       outline: none;
       transition: 0.2s;
-      margin: 0; /* Reset margins */
     }
     .modal-input:focus { border-color: var(--primary); background: var(--card); }
 
@@ -904,6 +875,9 @@ const App = () => {
 
       const prompt = `Extract the recipe from this image. Return valid JSON with these keys: "name" (string), "ingredients" (single string with newlines), "instructions" (single string with newlines). If no recipe is found, return null.`;
       
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s Timeout
+
       try {
         let response;
         if (testApiKey) {
@@ -922,7 +896,8 @@ const App = () => {
                     { inlineData: { mimeType: "image/jpeg", data: base64Data } }
                   ]
                 }]
-              })
+              }),
+              signal: controller.signal
             }
           );
         } else {
@@ -933,9 +908,12 @@ const App = () => {
             body: JSON.stringify({
               prompt: prompt,
               base64Data: base64Data
-            })
+            }),
+            signal: controller.signal
           });
         }
+        
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           // Enhanced Error Logging
@@ -993,7 +971,12 @@ const App = () => {
         return null;
 
       } catch (e) {
-        addLog("Network/Server Error: " + e.message);
+        clearTimeout(timeoutId);
+        if (e.name === 'AbortError') {
+             addLog("Request timed out (30s).");
+        } else {
+             addLog("Network/Server Error: " + e.message);
+        }
         return null;
       }
     };
@@ -1035,6 +1018,7 @@ const App = () => {
         
         for (let i = 0; i < files.length; i++) {
           setBatchProgress({ current: i + 1, total: files.length });
+          addLog(`Processing file ${i + 1} of ${files.length}...`);
           try {
             const base64 = await new Promise((resolve) => {
               const reader = new FileReader();
@@ -1042,6 +1026,9 @@ const App = () => {
               reader.readAsDataURL(files[i]);
             });
             
+            // Add slight delay to prevent rate limits
+            if(i > 0) await new Promise(r => setTimeout(r, 1000));
+
             const recipeData = await getRecipeFromImage(base64);
             
             if (recipeData) {
@@ -1052,7 +1039,9 @@ const App = () => {
                 source: "AI Batch Scan",
                 createdAt: Date.now()
               });
-              addLog(`Imported: ${recipeData.name}`);
+              addLog(`Success: ${recipeData.name}`);
+            } else {
+              addLog(`Failed: File ${i + 1} returned no data.`);
             }
           } catch (e) {
             addLog(`Batch Error (File ${i+1}): ${e.message}`);
@@ -1276,7 +1265,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.2</p>
+            <p className="text-xs text-muted font-mono">v2.9.3</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
