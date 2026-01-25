@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
-  Camera, Link as LinkIcon, Layers, Bug, Key
+  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2
 } from 'lucide-react';
 
 // Firebase Imports
@@ -151,33 +151,6 @@ const toTitleCase = (str) => {
   return String(str).toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
-const fetchWithRetry = async (url, options, logFn, maxRetries = 5) => {
-  let lastError = null;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      logFn(`Attempt ${i + 1}/${maxRetries}: sending request...`);
-      const response = await fetch(url, options);
-      if (response.ok) {
-        logFn(`Success: HTTP ${response.status}`);
-        return response;
-      }
-      const errorText = await response.text();
-      const errorMsg = `HTTP ${response.status}: ${errorText.substring(0, 150)}...`;
-      logFn(`Fail: ${errorMsg}`);
-      lastError = errorMsg;
-    } catch (err) {
-      logFn(`Network Error: ${err.message}`);
-      lastError = err.message;
-    }
-    if (i < maxRetries - 1) {
-      const delay = Math.pow(2, i) * 1000;
-      logFn(`Retrying in ${delay}ms...`);
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
-  throw new Error(lastError || "Connection failed.");
-};
-
 const parseAndSanitizeAIJSON = (text) => {
   try {
     return JSON.parse(text);
@@ -238,6 +211,11 @@ const App = () => {
   const [debugLogs, setDebugLogs] = useState([]);
   const isAutoLoginAttempted = useRef(false);
 
+  // Full Screen & Resizable Layout State
+  const [fullScreenRecipe, setFullScreenRecipe] = useState(null);
+  const [splitRatio, setSplitRatio] = useState(50); // percentage for left column
+  const isResizingRef = useRef(false);
+
   // New State for Test API Key
   const [testApiKey, setTestApiKey] = useState('');
 
@@ -269,11 +247,35 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.7");
+    console.log("App Mounted - v2.9.8");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
   }, []);
+
+  // Splitter Handlers
+  const startResizing = () => {
+    isResizingRef.current = true;
+  };
+  const stopResizing = () => {
+    isResizingRef.current = false;
+  };
+  const handleResize = (e) => {
+    if (!isResizingRef.current) return;
+    const newRatio = (e.clientX / window.innerWidth) * 100;
+    if (newRatio > 20 && newRatio < 80) setSplitRatio(newRatio);
+  };
+
+  useEffect(() => {
+    if (fullScreenRecipe) {
+      window.addEventListener('mousemove', handleResize);
+      window.addEventListener('mouseup', stopResizing);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleResize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [fullScreenRecipe]);
 
   const addLog = (msg) => {
     const time = new Date().toLocaleTimeString();
@@ -583,11 +585,50 @@ const App = () => {
       border: none;
       display: flex; align-items: center;
     }
-    
+
     /* Explicit Color Classes */
     .bg-red-500 { background-color: #ef4444; color: white; }
     .bg-slate-500 { background-color: #64748b; color: white; }
     .bg-green-600 { background-color: #16a34a; color: white; }
+
+    /* Full Window Styles */
+    .full-window-overlay {
+      position: fixed; inset: 0; z-index: 2000;
+      background-color: var(--bg);
+      display: flex; flex-direction: column;
+    }
+    .fw-header {
+      flex: 0 0 auto;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background-color: var(--header);
+    }
+    .fw-body {
+      flex: 1 1 auto;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+    .fw-col {
+      overflow-y: auto;
+      padding: 24px;
+      height: 100%;
+    }
+    .fw-resizer {
+      width: 12px;
+      cursor: col-resize;
+      background-color: var(--border);
+      flex: 0 0 auto;
+      transition: background 0.2s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .fw-resizer:hover, .fw-resizer:active {
+      background-color: var(--primary);
+    }
+    .fw-resizer::after {
+      content: '⋮'; color: var(--muted); font-size: 14px;
+    }
 
     @media (min-width: 640px) {
       .columns-container { grid-template-columns: 1fr 1fr 1fr; }
@@ -1194,6 +1235,58 @@ const App = () => {
       <div className={`app-container ${theme}`}>
       <div className="fixed-background"></div>
 
+      {/* Full Window Recipe View */}
+      {fullScreenRecipe && (
+        <div className={`full-window-overlay ${theme === 'dark' ? 'dark' : ''}`}>
+          <div className="fw-header">
+            <h2 className="text-xl font-bold text-primary">{fullScreenRecipe.name}</h2>
+            <button 
+              onClick={() => setFullScreenRecipe(null)} 
+              className="btn-mini bg-slate-500 text-white hover:bg-slate-600 !p-2"
+            >
+              <X size={18}/>
+            </button>
+          </div>
+          <div 
+            className="fw-body" 
+            onMouseMove={handleResize} 
+            onMouseUp={stopResizing} 
+            onMouseLeave={stopResizing}
+          >
+            {/* Ingredients Column (Left) */}
+            <div className="fw-col border-r border-border bg-card/50" style={{ width: `${splitRatio}%` }}>
+              <h3 className="text-lg font-bold mb-4 text-primary uppercase tracking-wide">Ingredients</h3>
+              <div className="space-y-2 font-medium">
+                {(fullScreenRecipe.ingredients || "").split('\n').map((line, idx) => (
+                  <div key={idx} className="flex items-start gap-2 p-1 border-b border-border/10">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+                    <span>{line}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Resizer Handle */}
+            <div className="fw-resizer" onMouseDown={startResizing}></div>
+
+            {/* Instructions Column (Right) */}
+            <div className="fw-col flex-1 bg-card/30">
+              <h3 className="text-lg font-bold mb-4 text-primary uppercase tracking-wide">Instructions</h3>
+              <div className="space-y-4 text-base leading-relaxed">
+                {(fullScreenRecipe.instructions || "").split('\n').map((step, idx) => (
+                  <div key={idx} className="flex gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-primary text-white font-bold rounded-full text-xs mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <span>{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Modal */}
       {deleteConfirmation && (
         <div className="modal-overlay" onClick={() => setDeleteConfirmation(null)}>
@@ -1343,7 +1436,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.7</p>
+            <p className="text-xs text-muted font-mono">v2.9.8</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1382,7 +1475,12 @@ const App = () => {
               <span>{recipe.name}</span>
               {expandedId === recipe.id && <button onClick={(e) => { e.stopPropagation(); handleEditRecipe(recipe); }} className="p-1 bg-slate-100 rounded hover:bg-orange-100 text-slate-400 hover:text-orange-500"><Edit2 size={14}/></button>}
               </div>
-              <div className="match-tag">{recipe.percent}%</div>
+              <div className="flex gap-2 items-center">
+                  <button className="btn-mini p-1.5" onClick={(e) => { e.stopPropagation(); setFullScreenRecipe(recipe); }} title="Full Window View">
+                    <Maximize2 size={14} />
+                  </button>
+                  <div className="match-tag">{recipe.percent}%</div>
+              </div>
               </div>
               {expandedId === recipe.id && <div className="mt-4 text-sm text-muted bg-slate-50 dark:bg-slate-900/40 p-6 rounded-xl border border-border">
                 <div className="mb-4">
