@@ -247,7 +247,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.8");
+    console.log("App Mounted - v2.9.9");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -594,15 +594,21 @@ const App = () => {
     /* Full Window Styles */
     .full-window-overlay {
       position: fixed; inset: 0; z-index: 2000;
-      background-color: var(--bg);
+      background-color: #f3f4f6; /* Light Grey */
+      color: #000000;
       display: flex; flex-direction: column;
+    }
+    .dark .full-window-overlay {
+      background-color: #4e342e; /* Brown */
+      color: #ffffff;
     }
     .fw-header {
       flex: 0 0 auto;
       display: flex; justify-content: space-between; align-items: center;
-      padding: 16px 24px;
+      padding: 6px 12px; /* Much smaller */
       border-bottom: 1px solid var(--border);
-      background-color: var(--header);
+      background-color: var(--header); 
+      /* "header colors are okay as they are" so we keep var(--header) */
     }
     .fw-body {
       flex: 1 1 auto;
@@ -612,8 +618,13 @@ const App = () => {
     }
     .fw-col {
       overflow-y: auto;
-      padding: 24px;
+      padding: 32px;
       height: 100%;
+      font-size: 24px; /* 18pt */
+    }
+    .fw-item {
+        margin-bottom: 24px; /* Larger line spacing */
+        line-height: 1.5;
     }
     .fw-resizer {
       width: 12px;
@@ -1254,12 +1265,12 @@ const App = () => {
             onMouseLeave={stopResizing}
           >
             {/* Ingredients Column (Left) */}
-            <div className="fw-col border-r border-border bg-card/50" style={{ width: `${splitRatio}%` }}>
+            <div className="fw-col border-r border-border" style={{ width: `${splitRatio}%` }}>
               <h3 className="text-lg font-bold mb-4 text-primary uppercase tracking-wide">Ingredients</h3>
-              <div className="space-y-2 font-medium">
+              <div className="fw-list">
                 {(fullScreenRecipe.ingredients || "").split('\n').map((line, idx) => (
-                  <div key={idx} className="flex items-start gap-2 p-1 border-b border-border/10">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+                  <div key={idx} className="fw-item flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-3 flex-shrink-0" />
                     <span>{line}</span>
                   </div>
                 ))}
@@ -1270,12 +1281,12 @@ const App = () => {
             <div className="fw-resizer" onMouseDown={startResizing}></div>
 
             {/* Instructions Column (Right) */}
-            <div className="fw-col flex-1 bg-card/30">
+            <div className="fw-col flex-1">
               <h3 className="text-lg font-bold mb-4 text-primary uppercase tracking-wide">Instructions</h3>
-              <div className="space-y-4 text-base leading-relaxed">
+              <div className="fw-list">
                 {(fullScreenRecipe.instructions || "").split('\n').map((step, idx) => (
-                  <div key={idx} className="flex gap-3">
-                    <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-primary text-white font-bold rounded-full text-xs mt-0.5">
+                  <div key={idx} className="fw-item flex gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-primary text-white font-bold rounded-full text-xs mt-1.5">
                       {idx + 1}
                     </span>
                     <span>{step}</span>
@@ -1436,7 +1447,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.8</p>
+            <p className="text-xs text-muted font-mono">v2.9.9</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1476,10 +1487,10 @@ const App = () => {
               {expandedId === recipe.id && <button onClick={(e) => { e.stopPropagation(); handleEditRecipe(recipe); }} className="p-1 bg-slate-100 rounded hover:bg-orange-100 text-slate-400 hover:text-orange-500"><Edit2 size={14}/></button>}
               </div>
               <div className="flex gap-2 items-center">
+                  <div className="match-tag">{recipe.percent}%</div>
                   <button className="btn-mini p-1.5" onClick={(e) => { e.stopPropagation(); setFullScreenRecipe(recipe); }} title="Full Window View">
                     <Maximize2 size={14} />
                   </button>
-                  <div className="match-tag">{recipe.percent}%</div>
               </div>
               </div>
               {expandedId === recipe.id && <div className="mt-4 text-sm text-muted bg-slate-50 dark:bg-slate-900/40 p-6 rounded-xl border border-border">
