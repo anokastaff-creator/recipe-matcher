@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
-  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning
+  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings
 } from 'lucide-react';
 
 // Firebase Imports
@@ -56,15 +56,22 @@ const initializeFirebase = () => {
     if (!getApps().length) {
       app = initializeApp(firebaseConfig);
       
-      // Mobile Connectivity Fix: Force Long Polling
-      // This bypasses WebSocket issues common on mobile networks/browsers
-      const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      // Mobile Connectivity Fix: Allow Manual Override via LocalStorage
+      const storedPolling = localStorage.getItem('rm_force_polling');
+      const isMobileUA = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       
+      // Use Long Polling if manually set OR if detected as mobile (and not manually disabled)
+      const useLongPolling = storedPolling === 'true' || (isMobileUA && storedPolling !== 'false');
+
       db = initializeFirestore(app, {
-        experimentalForceLongPolling: isMobile,
+        experimentalForceLongPolling: useLongPolling,
       });
 
-      enableIndexedDbPersistence(db).catch((err) => {
+      console.log(`[Firebase] Initialized. LongPolling: ${useLongPolling} (UserAgent: ${isMobileUA}, Manual: ${storedPolling})`);
+
+      enableIndexedDbPersistence(db).then(() => {
+          console.log("[Firebase] Persistence enabled");
+      }).catch((err) => {
           console.warn("Persistence failed (common in private/incognito windows):", err.code);
       });
     } else {
@@ -223,6 +230,12 @@ const App = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const isAutoLoginAttempted = useRef(false);
 
+  // Connection Settings State
+  const [forceLongPolling, setForceLongPolling] = useState(() => {
+      const stored = localStorage.getItem('rm_force_polling');
+      return stored === 'true';
+  });
+
   // Full Screen & Resizable Layout State
   const [fullScreenRecipe, setFullScreenRecipe] = useState(null);
   const [splitRatio, setSplitRatio] = useState(50); // percentage for left column
@@ -259,7 +272,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.18");
+    console.log("App Mounted - v2.9.19");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -593,6 +606,7 @@ const App = () => {
       justify-content: space-between;
       margin-top: 12px;
       width: 100%;
+      flex-wrap: nowrap; /* Ensure they stay on one line */
     }
     .edit-group {
       display: flex;
@@ -1318,6 +1332,14 @@ const App = () => {
       }
     };
 
+    // Manual Long Polling Toggle
+    const toggleLongPolling = () => {
+        const newValue = !forceLongPolling;
+        setForceLongPolling(newValue);
+        localStorage.setItem('rm_force_polling', String(newValue));
+        window.location.reload();
+    };
+
     if (isLoading) return <div className="app-container dark" style={{justifyContent:'center', display:'flex', alignItems:'center'}}><Loader2 className="animate-spin text-orange-500 mx-auto mb-4" size={56}/></div>;
 
     return (
@@ -1527,7 +1549,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.18</p>
+            <p className="text-xs text-muted font-mono">v2.9.19</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1683,6 +1705,9 @@ const App = () => {
         <div className="card text-[11px] font-mono">
         <div className="flex justify-between items-center mb-4"><div className="font-black text-xs text-primary uppercase">System Status</div>
         <div className="flex gap-2">
+            <button onClick={toggleLongPolling} className="text-xs px-2 py-1 bg-muted/20 rounded hover:bg-muted/40 transition-colors" title="Force Long Polling for Mobile">
+                {forceLongPolling ? "LongPolling: ON" : "LongPolling: OFF"}
+            </button>
             <button onClick={handleReconnect} title="Force Reconnect/Ping" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"><CloudLightning size={14} className="text-primary"/></button>
             <button onClick={() => window.location.reload()} title="Reload Page" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"><RefreshCw size={14}/></button>
         </div>
@@ -1693,6 +1718,7 @@ const App = () => {
           <div className="col-span-2"><span className="text-muted">Email:</span> {user ? user.email : 'None'}</div>
           <div><span className="text-muted">Recipes:</span> {recipes ? recipes.length : 0}</div>
           <div><span className="text-muted">Browser Net:</span> {isOnline ? 'Online' : 'Offline'}</div>
+          <div className="col-span-2 text-[10px] text-muted truncate">UA: {typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown'}</div>
         </div>
 
         <div className="font-black text-xs text-primary uppercase mb-2">Event Log</div>
