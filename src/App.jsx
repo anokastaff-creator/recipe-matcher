@@ -128,7 +128,7 @@ const MASTER_INGREDIENTS = {
     "Pine Nut", "Almond", "Vegetable Oil", "Canola Oil", "Olive Oil", "Lard", "Sesame Oil", "Peanut Oil", "Coconut Oil",
     "White Vinegar", "Apple Cider Vinegar", "Balsamic Vinegar", "Red Wine Vinegar", "Rice Vinegar", "Rice Wine Vinegar",
     "Black Vinegar", "Honey", "Maple Syrup", "Sugar", "Brown Sugar", "Palm Sugar", "Semi-sweet Chocolate",
-    "Cocoa Powder", "Vanilla Extract", "Powdered Sugar", "Gelatin", "Chicken Bouillon", "Lasagna",
+    "Cocoa Powder", "Vanilla Extract", "Powdered Sugar", "Gelatin", "Chicken Bouillon", "Lasagna Sheet",
     "Taco Shell", "Tortilla Chip", "Sesame Seed", "Dried Cranberry", "Almond Flour", "Molasses", "Agave Nectar",
     "Cream of Chicken Soup", "Cream of Mushroom Soup", "Pimentos", "Beef Bouillon", "Noodles", "Diced Tomatoes", "Spaghetti", "Rice", "Long Grain Rice"
   ],
@@ -231,8 +231,9 @@ const App = () => {
   const [debugLogs, setDebugLogs] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isBlocked, setIsBlocked] = useState(false); 
-  const [isCacheMode, setIsCacheMode] = useState(false); // NEW: Track cache state
-  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced', 'pending', 'error'
+  const [showBlockInfo, setShowBlockInfo] = useState(false); // RESTORED STATE
+  const [isCacheMode, setIsCacheMode] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('synced');
   const isAutoLoginAttempted = useRef(false);
 
   // Connection Settings State
@@ -278,7 +279,7 @@ const App = () => {
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.29");
+    console.log("App Mounted - v2.9.32");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -330,10 +331,12 @@ const App = () => {
   }, [fullScreenRecipe]);
 
   const addLog = (msg) => {
+    // Safety check for objects
+    const textMsg = typeof msg === 'object' ? JSON.stringify(msg) : String(msg);
     const time = new Date().toLocaleTimeString();
-    setDebugLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 30));
-    console.log(`[RecipeMatcher] ${msg}`); 
-    if (msg.includes('ERR_BLOCKED_BY_CLIENT')) setIsBlocked(true);
+    setDebugLogs(prev => [`[${time}] ${textMsg}`, ...prev].slice(0, 30));
+    console.log(`[RecipeMatcher] ${textMsg}`); 
+    if (textMsg.includes('ERR_BLOCKED_BY_CLIENT')) setIsBlocked(true);
   };
 
   const getSafeUid = (u) => String(u?.uid || 'guest').replace(/\//g, '_');
@@ -614,6 +617,7 @@ const App = () => {
       align-items: center;
       justify-content: center;
       gap: 8px;
+      cursor: pointer;
     }
     .warning-banner.critical {
       background-color: #ef4444; /* Red for blocks */
@@ -1234,16 +1238,20 @@ const App = () => {
 
                // Catch permission errors explicitly during save
                try {
-                  await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
+                  // TIMEOUT WRAPPER
+                  const savePromise = addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
                     name: recipeData.name,
                     ingredients: recipeData.ingredients,
                     instructions: recipeData.instructions,
                     source: "AI Batch Scan",
                     createdAt: Date.now()
                   });
+                  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Save timeout")), 5000));
+                  
+                  await Promise.race([savePromise, timeoutPromise]);
                   addLog(`Success: ${recipeData.name}`);
                } catch (saveError) {
-                  addLog(`SAVE ERROR: ${saveError.code} - ${saveError.message}`);
+                  addLog(`SAVE ERROR: ${saveError.message}`);
                   if (saveError.code === 'permission-denied') {
                       alert("PERMISSION DENIED: Firebase rules blocking write.");
                   }
@@ -1288,10 +1296,7 @@ const App = () => {
         setActiveTab('recipes');
         addLog("Recipe Saved.");
       } catch (e) {
-        addLog(`Save Error: ${e.code} - ${e.message}`);
-        if (e.code === 'permission-denied') {
-            alert("PERMISSION DENIED: Check Firebase Console Rules.");
-        }
+        addLog(`Save Error: ${e.message}`);
       }
       setIsImporting(false);
     };
@@ -1449,10 +1454,9 @@ const App = () => {
       
       {/* Network Block Warning */}
       {isBlocked && (
-        <div className="warning-banner critical">
+        <div className="warning-banner critical" onClick={() => setShowBlockInfo(true)}>
           <ShieldAlert size={14} className="inline mr-2" />
-          ⚠️ Connection Blocked! Disable Antivirus/VPN/AdBlock for this site.
-          <div className="text-[10px] mt-1 opacity-80">firestore.googleapis.com is being blocked.</div>
+          <span>Connection Blocked! Click here for fix instructions.</span>
         </div>
       )}
       
@@ -1461,6 +1465,40 @@ const App = () => {
         <div className="warning-banner">
           <CloudOff size={14} className="inline mr-2" />
            ⚠️ Using Local Data (Not Syncing)
+        </div>
+      )}
+      
+      {/* Help Modal for Blocked Connection */}
+      {showBlockInfo && (
+        <div className="modal-overlay" onClick={() => setShowBlockInfo(false)}>
+            <div className="modal-card max-w-lg" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-red-500 flex items-center gap-2"><ShieldAlert/> Connection Blocked</h2>
+                    <button onClick={() => setShowBlockInfo(false)}><X size={20}/></button>
+                </div>
+                <div className="text-sm space-y-4">
+                    <p className="font-bold">Your browser is blocking the database connection.</p>
+                    <p>To fix this and sync your recipes:</p>
+                    
+                    <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg border border-border">
+                        <strong className="block mb-1 text-primary">If using Vivaldi:</strong>
+                        1. Click the <ShieldAlert size={12} className="inline"/> <b>Shield Icon</b> in the address bar (left side).<br/>
+                        2. Select <b>"No Blocking"</b> for this site.<br/>
+                        3. Reload the page.
+                    </div>
+
+                    <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg border border-border">
+                        <strong className="block mb-1 text-primary">If using Firefox:</strong>
+                        1. Click the <ShieldAlert size={12} className="inline"/> <b>Shield Icon</b> in the address bar (left side).<br/>
+                        2. Toggle the switch to <b>OFF</b> ("Enhanced Tracking Protection").<br/>
+                        3. Reload the page.
+                    </div>
+                    
+                    <div className="text-xs text-muted mt-4">
+                        <i>Note: This happens because privacy browsers sometimes mistake the Google Database connection for a "tracker".</i>
+                    </div>
+                </div>
+            </div>
         </div>
       )}
 
@@ -1625,10 +1663,10 @@ const App = () => {
       </span>
       {/* Sync Status Indicator */}
         <div className="flex items-center gap-2 bg-input-bg px-3 py-1 rounded-full border border-border">
-          {syncStatus === 'synced' && <><Cloud size={16} className="text-green-500"/><span className="text-xs font-bold uppercase">Synced</span></>}
-          {syncStatus === 'pending' && <><RefreshCw size={16} className="animate-spin text-yellow-500"/><span className="text-xs font-bold uppercase">Saving...</span></>}
-          {syncStatus === 'offline' && <><CloudOff size={16} className="text-gray-500"/><span className="text-xs font-bold uppercase">Offline</span></>}
-          {syncStatus === 'error' && <><ShieldAlert size={16} className="text-red-500"/><span className="text-xs font-bold uppercase">Blocked</span></>}
+          {syncStatus === 'synced' && <><Cloud size={16} className="text-green-600"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Synced</span></>}
+          {syncStatus === 'pending' && <><RefreshCw size={16} className="animate-spin text-yellow-600"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Saving...</span></>}
+          {syncStatus === 'offline' && <><CloudOff size={16} className="text-gray-500"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Offline</span></>}
+          {syncStatus === 'error' && <><ShieldAlert size={16} className="text-red-600"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Blocked</span></>}
         </div>
       </div>
       <button className="color-toggle" onClick={() => setColorTheme(t => t === 'orange' ? 'blue' : 'orange')}></button>
@@ -1675,7 +1713,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.29</p>
+            <p className="text-xs text-muted font-mono">v2.9.32</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1837,26 +1875,26 @@ const App = () => {
               title="Download Backup (JSON)" 
               className={`p-2 rounded flex items-center gap-2 ${recipes && recipes.length > 0 && isCacheMode ? 'bg-green-100 dark:bg-green-900 animate-pulse' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
               <Download size={14} className={recipes && recipes.length > 0 && isCacheMode ? "text-green-600 dark:text-green-400" : "text-green-500"}/>
-              <span className="text-xs font-bold">Backup</span>
+              <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Backup</span>
             </button>
-            <button onClick={toggleLongPolling} className="text-xs px-2 py-1 bg-muted/20 rounded hover:bg-muted/40 transition-colors font-bold" title="Force Long Polling for Mobile">
+            <button onClick={toggleLongPolling} className="text-xs px-2 py-1 bg-muted/20 rounded hover:bg-muted/40 transition-colors font-bold text-gray-900 dark:text-gray-100" title="Force Long Polling for Mobile">
                 {forceLongPolling ? "LongPolling: ON" : "LongPolling: OFF"}
             </button>
             <button onClick={handleReconnect} title="Force Reconnect/Ping" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
                 <CloudLightning size={14} className="text-primary"/>
-                <span className="text-xs font-bold">Reconnect</span>
+                <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Reconnect</span>
             </button>
             <button onClick={handleInspectDB} title="Inspect Database" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
                 <Database size={14}/>
-                <span className="text-xs font-bold">Inspect</span>
+                <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Inspect</span>
             </button>
             <button onClick={handleResetData} title="Clear Cache & Reset" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-red-500 flex items-center gap-2">
                 <Trash2 size={14}/>
-                <span className="text-xs font-bold">Reset App</span>
+                <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Reset App</span>
             </button>
              <button onClick={() => window.location.reload()} title="Reload Page" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
                 <RefreshCw size={14}/>
-                <span className="text-xs font-bold">Reload</span>
+                <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Reload</span>
             </button>
         </div>
 
