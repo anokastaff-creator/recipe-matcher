@@ -280,7 +280,7 @@ const App = () => {
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.44");
+    console.log("App Mounted - v2.9.45");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -304,11 +304,6 @@ const App = () => {
     if (fb.db) {
         enableNetwork(fb.db).catch(e => console.warn("Network enable warning:", e));
     }
-    
-    // Log configuration status on startup to help debug
-    const pollingStatus = localStorage.getItem('rm_force_polling');
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    addLog(`Config: LongPolling=${pollingStatus === 'true' ? 'ON' : 'OFF'} (UA Detect Mobile: ${isMobile})`);
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -1318,20 +1313,7 @@ const App = () => {
         setActiveTab('recipes');
         addLog("Recipe Saved.");
       } catch (e) {
-        if (e.code === 'permission-denied') {
-            alert("PERMISSION DENIED: Check Firebase Console Rules.");
-        } else if (e.message.includes("timeout")) {
-            if (isCacheMode || syncStatus === 'offline') {
-                addLog(`Saved to Device (Sync Pending)`);
-                // Assume success locally
-                resetManualForm();
-                setActiveTab('recipes');
-            } else {
-                alert("Save timed out! Check your network connection or ad-blocker.");
-            }
-        } else {
-             addLog(`Save Error: ${e.message}`);
-        }
+        addLog(`Save Error: ${e.message}`);
       }
       setIsImporting(false);
     };
@@ -1772,7 +1754,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.43</p>
+            <p className="text-xs text-muted font-mono">v2.9.44</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
