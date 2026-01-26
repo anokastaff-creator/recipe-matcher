@@ -128,7 +128,7 @@ const MASTER_INGREDIENTS = {
     "Pine Nut", "Almond", "Vegetable Oil", "Canola Oil", "Olive Oil", "Lard", "Sesame Oil", "Peanut Oil", "Coconut Oil",
     "White Vinegar", "Apple Cider Vinegar", "Balsamic Vinegar", "Red Wine Vinegar", "Rice Vinegar", "Rice Wine Vinegar",
     "Black Vinegar", "Honey", "Maple Syrup", "Sugar", "Brown Sugar", "Palm Sugar", "Semi-sweet Chocolate",
-    "Cocoa Powder", "Vanilla Extract", "Powdered Sugar", "Gelatin", "Chicken Bouillon", "Lasagna Sheet",
+    "Cocoa Powder", "Vanilla Extract", "Powdered Sugar", "Gelatin", "Chicken Bouillon", "Lasagna",
     "Taco Shell", "Tortilla Chip", "Sesame Seed", "Dried Cranberry", "Almond Flour", "Molasses", "Agave Nectar",
     "Cream of Chicken Soup", "Cream of Mushroom Soup", "Pimentos", "Beef Bouillon", "Noodles", "Diced Tomatoes", "Spaghetti", "Rice", "Long Grain Rice"
   ],
@@ -278,7 +278,7 @@ const App = () => {
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.28");
+    console.log("App Mounted - v2.9.29");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -1624,11 +1624,11 @@ const App = () => {
       {(!user || user.isAnonymous) ? 'Sign In' : (user.displayName || 'Member')}
       </span>
       {/* Sync Status Indicator */}
-        <div className="flex items-center gap-1 bg-input-bg px-2 py-1 rounded-full border border-border">
-          {syncStatus === 'synced' && <><Cloud size={14} className="text-green-600"/><span className="text-xs font-bold text-green-700">Synced</span></>}
-          {syncStatus === 'pending' && <><RefreshCw size={14} className="animate-spin text-yellow-600"/><span className="text-xs font-bold text-yellow-700">Saving...</span></>}
-          {syncStatus === 'offline' && <><CloudOff size={14} className="text-gray-500"/><span className="text-xs font-bold text-gray-600">Offline</span></>}
-          {syncStatus === 'error' && <><ShieldAlert size={14} className="text-red-600"/><span className="text-xs font-bold text-red-700">Blocked</span></>}
+        <div className="flex items-center gap-2 bg-input-bg px-3 py-1 rounded-full border border-border">
+          {syncStatus === 'synced' && <><Cloud size={16} className="text-green-500"/><span className="text-xs font-bold uppercase">Synced</span></>}
+          {syncStatus === 'pending' && <><RefreshCw size={16} className="animate-spin text-yellow-500"/><span className="text-xs font-bold uppercase">Saving...</span></>}
+          {syncStatus === 'offline' && <><CloudOff size={16} className="text-gray-500"/><span className="text-xs font-bold uppercase">Offline</span></>}
+          {syncStatus === 'error' && <><ShieldAlert size={16} className="text-red-500"/><span className="text-xs font-bold uppercase">Blocked</span></>}
         </div>
       </div>
       <button className="color-toggle" onClick={() => setColorTheme(t => t === 'orange' ? 'blue' : 'orange')}></button>
@@ -1675,7 +1675,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.28</p>
+            <p className="text-xs text-muted font-mono">v2.9.29</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1831,22 +1831,35 @@ const App = () => {
         <div className="space-y-4">
         <div className="card text-[11px] font-mono">
         <div className="flex justify-between items-center mb-4"><div className="font-black text-xs text-primary uppercase">System Status</div>
-        <div className="flex gap-2">
+        </div>
+        <div className="flex gap-2 flex-wrap mb-4 border-b border-border pb-4">
             <button onClick={handleExportData} 
               title="Download Backup (JSON)" 
-              className={`p-1 rounded ${recipes && recipes.length > 0 && isCacheMode ? 'bg-green-100 dark:bg-green-900 animate-pulse' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
+              className={`p-2 rounded flex items-center gap-2 ${recipes && recipes.length > 0 && isCacheMode ? 'bg-green-100 dark:bg-green-900 animate-pulse' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
               <Download size={14} className={recipes && recipes.length > 0 && isCacheMode ? "text-green-600 dark:text-green-400" : "text-green-500"}/>
-              {recipes && recipes.length > 0 && isCacheMode && <span className="ml-1 text-[10px] font-bold text-green-700 dark:text-green-300">Backup ({recipes.length})</span>}
+              <span className="text-xs font-bold">Backup</span>
             </button>
-            <button onClick={toggleLongPolling} className="text-xs px-2 py-1 bg-muted/20 rounded hover:bg-muted/40 transition-colors" title="Force Long Polling for Mobile">
+            <button onClick={toggleLongPolling} className="text-xs px-2 py-1 bg-muted/20 rounded hover:bg-muted/40 transition-colors font-bold" title="Force Long Polling for Mobile">
                 {forceLongPolling ? "LongPolling: ON" : "LongPolling: OFF"}
             </button>
-            <button onClick={handleReconnect} title="Force Reconnect/Ping" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"><CloudLightning size={14} className="text-primary"/></button>
-            <button onClick={handleInspectDB} title="Inspect Database (Raw Check)" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"><Database size={14}/></button>
-            <button onClick={handleResetData} title="Clear Cache & Reset" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-red-500"><Trash2 size={14}/></button>
-            <button onClick={() => window.location.reload()} title="Reload Page" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"><RefreshCw size={14}/></button>
+            <button onClick={handleReconnect} title="Force Reconnect/Ping" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
+                <CloudLightning size={14} className="text-primary"/>
+                <span className="text-xs font-bold">Reconnect</span>
+            </button>
+            <button onClick={handleInspectDB} title="Inspect Database" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
+                <Database size={14}/>
+                <span className="text-xs font-bold">Inspect</span>
+            </button>
+            <button onClick={handleResetData} title="Clear Cache & Reset" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-red-500 flex items-center gap-2">
+                <Trash2 size={14}/>
+                <span className="text-xs font-bold">Reset App</span>
+            </button>
+             <button onClick={() => window.location.reload()} title="Reload Page" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
+                <RefreshCw size={14}/>
+                <span className="text-xs font-bold">Reload</span>
+            </button>
         </div>
-        </div>
+
         <div className="grid grid-cols-2 gap-2 mb-4 border-b border-border pb-4">
           <div><span className="text-muted">App ID:</span> {appId}</div>
           <div><span className="text-muted">User ID:</span> <span className="text-[10px] break-all">{user ? user.uid : 'None'}</span></div>
