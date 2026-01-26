@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
-  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings
+  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings, Database
 } from 'lucide-react';
 
 // Firebase Imports
@@ -300,7 +300,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.20");
+    console.log("App Mounted - v2.9.21");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -1384,6 +1384,26 @@ const App = () => {
         setTimeout(() => window.location.reload(), 2000);
       }
     };
+    
+    // Admin Inspector: List All Collections
+    const handleInspectDB = async () => {
+        if (!user) return;
+        addLog("Inspecting DB Structure...");
+        // Note: Client SDK cannot list root collections. We can only test known paths.
+        // We will check the current user's path specifically.
+        const path = `artifacts/${appId}/users/${user.uid}/recipes`;
+        addLog(`Checking path: ${path}`);
+        
+        try {
+            const snap = await getDocs(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'));
+            addLog(`Found ${snap.size} docs at this path.`);
+            if (snap.size === 0) {
+                 addLog("WARNING: Path is empty. Data might be under a different UID?");
+            }
+        } catch(e) {
+            addLog(`Inspect Error: ${e.message}`);
+        }
+    };
 
     if (isLoading) return <div className="app-container dark" style={{justifyContent:'center', display:'flex', alignItems:'center'}}><Loader2 className="animate-spin text-orange-500 mx-auto mb-4" size={56}/></div>;
 
@@ -1594,7 +1614,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.20</p>
+            <p className="text-xs text-muted font-mono">v2.9.21</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1754,6 +1774,7 @@ const App = () => {
                 {forceLongPolling ? "LongPolling: ON" : "LongPolling: OFF"}
             </button>
             <button onClick={handleReconnect} title="Force Reconnect/Ping" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"><CloudLightning size={14} className="text-primary"/></button>
+            <button onClick={handleInspectDB} title="Inspect Database (Raw Check)" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"><Database size={14}/></button>
             <button onClick={handleResetData} title="Clear Cache & Reset" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-red-500"><Trash2 size={14}/></button>
             <button onClick={() => window.location.reload()} title="Reload Page" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"><RefreshCw size={14}/></button>
         </div>
