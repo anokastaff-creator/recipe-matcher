@@ -2,9 +2,9 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
-  Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings,
+  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, 
   AlertTriangle, ArrowDown, ArrowUp, FileText, Cloud, Edit,
-  Database, PenTool, ShieldAlert, CloudOff, Globe
+  Database, PenTool, ShieldAlert, CloudOff, Globe, Upload, Download
 } from 'lucide-react';
 
 // Firebase Imports
@@ -234,9 +234,13 @@ const App = () => {
   const [isBlocked, setIsBlocked] = useState(false); 
   const [showBlockInfo, setShowBlockInfo] = useState(false);
   const [isCacheMode, setIsCacheMode] = useState(false);
-  const [hasPending, setHasPending] = useState(false); // New: Track pending writes
+  const [hasPending, setHasPending] = useState(false);
   const [syncStatus, setSyncStatus] = useState('synced');
   const isAutoLoginAttempted = useRef(false);
+
+  // New States for Imports
+  const [urlImportMode, setUrlImportMode] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
 
   // Connection Settings State
   const [forceLongPolling, setForceLongPolling] = useState(() => {
@@ -248,9 +252,6 @@ const App = () => {
   const [fullScreenRecipe, setFullScreenRecipe] = useState(null);
   const [splitRatio, setSplitRatio] = useState(50); // percentage for left column
   const isResizingRef = useRef(false);
-
-  // New State for Test API Key
-  const [testApiKey, setTestApiKey] = useState('');
 
   // Pantry UI State
   const [activePantryCategory, setActivePantryCategory] = useState("Meats");
@@ -264,7 +265,7 @@ const App = () => {
   const [editRecipeForm, setEditRecipeForm] = useState({ name: '', ingredients: '', instructions: '' });
 
   // Delete Confirmation State
-  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id: string, name: string, collection: 'pantry'|'recipes' }
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -277,11 +278,13 @@ const App = () => {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 }); // NEW: Batch State
   const [manual, setManual] = useState({ name: '', ings: '', inst: '', source: '' });
   const [rawTextImport, setRawTextImport] = useState('');
+  
   const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null); // Ref for Camera
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.47");
+    console.log("App Mounted - v2.9.49");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -360,7 +363,6 @@ const App = () => {
     const availableSet = new Set();
     const dbStatusMap = new Map();
 
-    // 1. Add all items from DB that are 'have'
     items.forEach(i => {
       const lowerName = (i.name || "").toLowerCase();
       const isAvailable = i.status === 'have' || (i.status === undefined && i.available === true);
@@ -368,7 +370,6 @@ const App = () => {
       if (isAvailable) availableSet.add(lowerName);
     });
 
-      // 2. Add Master List defaults (only if not already decided by DB)
       Object.keys(MASTER_INGREDIENTS).forEach(cat => {
         MASTER_INGREDIENTS[cat].forEach(name => {
           const lowerName = name.toLowerCase();
@@ -724,15 +725,54 @@ const App = () => {
     return () => document.head.removeChild(style);
   }, [theme, colorTheme]);
 
-  useEffect(() => {
-    localStorage.setItem('rm_theme_v143', theme);
-    document.documentElement.className = theme;
-  }, [theme]);
+  // Handle URL Import Submission
+  const handleUrlSubmit = async (e) => {
+      e.preventDefault();
+      if (!urlInput || !user) return;
+      
+      setIsAnalyzing(true);
+      addLog(`Processing URL: ${urlInput}`);
+      
+      try {
+        let response;
+        const prompt = `Extract the recipe from this URL: ${urlInput}. Return valid JSON with keys: "name", "ingredients", "instructions".`;
+        
+        // Use existing Vercel proxy which calls Gemini
+        response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: prompt
+            })
+        });
 
-  // Persist Color Theme
-  useEffect(() => {
-    localStorage.setItem('rm_color_theme', colorTheme);
-  }, [colorTheme]);
+        if (!response.ok) throw new Error("Backend error or scraping failed");
+
+        const data = await response.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (text) {
+             const json = parseAndSanitizeAIJSON(text);
+             setManual({
+                name: json.name || "Imported Recipe",
+                ings: Array.isArray(json.ingredients) ? json.ingredients.join('\n') : (json.ingredients || ""),
+                inst: Array.isArray(json.instructions) ? json.instructions.join('\n') : (json.instructions || ""),
+                source: urlInput
+             });
+             addLog("URL Import Success");
+             setUrlImportMode(false);
+             setUrlInput('');
+        } else {
+             throw new Error("No recipe data found in AI response");
+        }
+
+      } catch(err) {
+          addLog(`URL Import Failed: ${err.message}`);
+          alert("Could not extract recipe from URL. Try pasting the text instead.");
+      } finally {
+          setIsAnalyzing(false);
+      }
+  };
 
   // Unified Session Management
   useEffect(() => {
@@ -1792,7 +1832,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.47</p>
+            <p className="text-xs text-muted font-mono">v2.9.48</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1884,6 +1924,20 @@ const App = () => {
             </div>
           </div>
 
+          <div className="import-option" onClick={() => setUrlImportMode(true)}>
+            <LinkIcon className="mx-auto mb-2 text-muted" size={24}/>
+            <div className="text-sm font-bold text-muted">Import URL</div>
+            <div className="text-[10px] text-muted">Web Page</div>
+          </div>
+          
+           {/* New: Import from Camera Option */}
+           <div className="import-option" onClick={() => cameraInputRef.current?.click()}>
+             <input type="file" ref={cameraInputRef} className="hidden-file-input" accept="image/*" capture="environment" onChange={handleImageSelect} />
+             <Camera className="mx-auto mb-2 text-primary" size={24}/>
+             <div className="text-sm font-bold">Take Photo</div>
+             <div className="text-[10px] text-muted">Use Camera</div>
+           </div>
+
           <div className="import-option" onClick={() => jsonImportRef.current?.click()}>
              <input type="file" ref={jsonImportRef} className="hidden-file-input" accept=".json" onChange={handleImportJSON} />
              <Upload className="mx-auto mb-2 text-primary" size={24}/>
@@ -1892,20 +1946,26 @@ const App = () => {
           </div>
         </div>
 
-        {/* Test API Key Input (For Preview Mode) */}
-        <div className="card bg-slate-100 dark:bg-slate-800/50 p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Key size={14} className="text-muted"/>
-            <span className="text-xs font-bold text-muted uppercase">Test API Key (Preview Mode)</span>
+        {/* URL Import Modal/Input Area */}
+        {urlImportMode && (
+          <div className="card bg-slate-100 dark:bg-slate-800/50 p-4">
+             <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-muted uppercase">Import from Web</span>
+                <button onClick={() => setUrlImportMode(false)}><X size={14}/></button>
+             </div>
+             <div className="flex gap-2">
+               <input 
+                  className="input-field text-sm" 
+                  placeholder="Paste recipe URL here..."
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+               />
+               <button className="btn-action btn-sm" onClick={handleUrlSubmit} disabled={isAnalyzing}>
+                  {isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : "Go"}
+               </button>
+             </div>
           </div>
-          <input 
-            className="input-field text-xs py-2" 
-            placeholder="Paste Gemini API Key here to test without Vercel deployment..."
-            value={testApiKey}
-            onChange={(e) => setTestApiKey(e.target.value)}
-            type="password"
-          />
-        </div>
+        )}
 
         {/* Smart Text Parser (Fallback) */}
         <div className="card bg-slate-100 dark:bg-slate-800/50">
