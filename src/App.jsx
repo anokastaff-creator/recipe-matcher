@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
-  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings, Database, AlertTriangle
+  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings, Database, AlertTriangle, Download, Upload, CloudOff, ShieldAlert,
+  Cloud
 } from 'lucide-react';
 
 // Firebase Imports
@@ -110,32 +111,32 @@ const MASTER_INGREDIENTS = {
   "Produce": [
     "Onion", "Red Onion", "Garlic", "Ginger", "Scallion", "Shallot", "Lemongrass", "Celery",
     "Carrot", "Bell Pepper", "Jalapeño", "Poblano", "Serrano Pepper", "Bird’s Eye Chili",
-    "Roma Tomato", "Tomatillo", "Russet Potato", "Cabbage", "Tomatoes",
+    "Roma Tomato", "Tomatillo", "Russet Potato", "Cabbage",
     "Bok Choy", "Broccoli", "Cauliflower", "Corn", "Button Mushroom", "Shiitake Mushroom", "Eggplant",
     "Zucchini", "Cucumber", "Spinach", "Kale", "Green Bean", "Snow Pea", "Asparagus", "Radish",
     "Bean Sprout", "Avocado", "Lime", "Lemon", "Apple", "Mango", "Pineapple", "Coconut", "Tamarind",
     "Fresh Basil", "Thai Basil", "Holy Basil", "Cilantro", "Parsley", "Dill", "Chives", "Mint", "Green Pea",
-    "Portabella Mushroom", "Mushrooms", "Potatoes", "Red Pepper", "Guacamole"
+    "Portabella Mushroom", "Mushrooms", "Potatoes", "Red Pepper"
   ],
   "Pantry": [
     "Dried Ancho Chili", "Dried Red Chili", "Jasmine Rice", "White Rice", "Brown Rice", "Arborio Rice", "Sticky Rice", "Gnocchi",
-    "Pasta", "Egg Noodle", "Rice Noodle", "Glass Noodle", "Corn Tortilla", "Flour Tortilla", "Green Chilies",
-    "White Bread", "Rye Bread", "Breadcrumbs", "Cornmeal", "Masa Harina", "Oats", "Flour", "Saltines", "Crackers",
+    "Pasta", "Egg Noodle", "Rice Noodle", "Glass Noodle", "Corn Tortilla", "Flour Tortilla",
+    "White Bread", "Rye Bread", "Breadcrumbs", "Cornmeal", "Masa Harina", "Oats", "All-Purpose Flour",
     "Cornstarch", "Potato Starch", "Baking Powder", "Baking Soda", "Yeast", "Chicken Stock", "Beef Stock", "Chicken Broth",
-    "Canned San Marzano Tomato", "Tomato Paste", "Tomato Sauce", "Coconut Milk", "Coconut Cream", "Potato Chips",
+    "Canned San Marzano Tomato", "Tomato Paste", "Tomato Sauce", "Coconut Milk", "Coconut Cream",
     "Pickle", "Sauerkraut", "Capers", "Black Olive", "Peanut Butter", "Roasted Peanut", "Walnut",
     "Pine Nut", "Almond", "Vegetable Oil", "Canola Oil", "Olive Oil", "Lard", "Sesame Oil", "Peanut Oil", "Coconut Oil",
     "White Vinegar", "Apple Cider Vinegar", "Balsamic Vinegar", "Red Wine Vinegar", "Rice Vinegar", "Rice Wine Vinegar",
     "Black Vinegar", "Honey", "Maple Syrup", "Sugar", "Brown Sugar", "Palm Sugar", "Semi-sweet Chocolate",
     "Cocoa Powder", "Vanilla Extract", "Powdered Sugar", "Gelatin", "Chicken Bouillon", "Lasagna Sheet",
     "Taco Shell", "Tortilla Chip", "Sesame Seed", "Dried Cranberry", "Almond Flour", "Molasses", "Agave Nectar",
-    "Cream of Chicken Soup", "Cream of Mushroom Soup", "Pimentos", "Beef Bouillon", "Noodles", "Diced Tomatoes", "Spaghetti", "Rice", "Long Grain Rice", "Linguine"
+    "Cream of Chicken Soup", "Cream of Mushroom Soup", "Pimentos", "Beef Bouillon", "Noodles", "Diced Tomatoes", "Spaghetti", "Rice", "Long Grain Rice"
   ],
   "Dairy": [
     "Whole Milk", "Heavy Cream", "Sour Cream", "Yogurt", "Buttermilk", "Condensed Milk", "Evaporated Milk",
-    "Cheddar Cheese", "Low Moisture Mozzarella", "Fresh Mozzarella", "Parmesan", "Ricotta Cheese",
+    "Cheddar Cheese", "Low Moisture Mozzarella", "Fresh Mozzarella", "Parmesan Cheese", "Ricotta Cheese",
     "Provolone Cheese", "Monterey Jack Cheese", "Queso Fresco", "Cotija Cheese", "Oaxaca Cheese",
-    "Swiss Cheese", "Cream Cheese", "Gouda Cheese", "Butter", "Egg", "Mexican Cheese",
+    "Swiss Cheese", "Cream Cheese", "Gouda Cheese", "Butter", "Egg",
     "Milk"
   ],
   "Sauces": [
@@ -152,11 +153,11 @@ const MASTER_INGREDIENTS = {
     "Rosemary", "Sage", "Bay Leaf", "Cinnamon", "Nutmeg", "Clove", "Allspice", "Caraway Seed",
     "Fennel Seed", "Ground Coriander", "Turmeric", "Star Anise", "Sichuan Peppercorn", "Five Spice Powder",
     "Garlic Powder", "Onion Powder", "MSG", "Curry Powder", "Italian Seasoning", "Taco Seasoning", "Saffron",
-    "Pepper", "Cajun Seasoning"
+    "Pepper"
   ],
   "Other": [
     "Red Wine", "White Wine", "Shaoxing Wine", "Beer",
-    "Sherry", "Water", "Pico de gallo"
+    "Sherry", "Water"
   ]
 };
 
@@ -229,7 +230,9 @@ const App = () => {
   const [colorTheme, setColorTheme] = useState(() => localStorage.getItem('rm_color_theme') || 'orange');
   const [debugLogs, setDebugLogs] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isBlocked, setIsBlocked] = useState(false); // New state for ad-block detection
+  const [isBlocked, setIsBlocked] = useState(false); 
+  const [isCacheMode, setIsCacheMode] = useState(false); // NEW: Track cache state
+  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced', 'pending', 'error'
   const isAutoLoginAttempted = useRef(false);
 
   // Connection Settings State
@@ -258,7 +261,7 @@ const App = () => {
   const [editRecipeForm, setEditRecipeForm] = useState({ name: '', ingredients: '', instructions: '' });
 
   // Delete Confirmation State
-  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id: string, name: string, collection: 'pantry'|'recipes' }
 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -267,14 +270,16 @@ const App = () => {
   const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   const [isImporting, setIsImporting] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [isAnalyzing, setIsAnalyzing] = useState(false); // AI Analysis State
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 }); // NEW: Batch State
   const [manual, setManual] = useState({ name: '', ings: '', inst: '', source: '' });
   const [rawTextImport, setRawTextImport] = useState('');
   const fileInputRef = useRef(null);
+  const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.22");
+    console.log("App Mounted - v2.9.27");
+    // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
 
@@ -287,6 +292,7 @@ const App = () => {
     const handleGlobalError = (event) => {
         if (event.message && event.message.includes('ERR_BLOCKED_BY_CLIENT')) {
             setIsBlocked(true);
+            setSyncStatus('error');
             addLog("CRITICAL: Connection blocked by extension!");
         }
     };
@@ -338,6 +344,7 @@ const App = () => {
     const availableSet = new Set();
     const dbStatusMap = new Map();
 
+    // 1. Add all items from DB that are 'have'
     items.forEach(i => {
       const lowerName = (i.name || "").toLowerCase();
       const isAvailable = i.status === 'have' || (i.status === undefined && i.available === true);
@@ -345,6 +352,7 @@ const App = () => {
       if (isAvailable) availableSet.add(lowerName);
     });
 
+      // 2. Add Master List defaults (only if not already decided by DB)
       Object.keys(MASTER_INGREDIENTS).forEach(cat => {
         MASTER_INGREDIENTS[cat].forEach(name => {
           const lowerName = name.toLowerCase();
@@ -562,53 +570,6 @@ const App = () => {
       z-index: 10;
     }
 
-    .modal-actions { display: flex; gap: 12px; margin-top: 16px; width: 100%; }
-    .modal-btn-action { flex: 1; border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; }
-    .bg-red { background: #ef4444; color: white; }
-    .bg-gray { background: #64748b; color: white; }
-
-    .whitespace-pre-wrap { white-space: pre-wrap; word-wrap: break-word; }
-    /* Auto-expanding logic is handled by component now */
-
-    .bubble-input {
-      font-size: 13px; padding: 6px 12px; border-radius: 99px;
-      border: 1px solid var(--border); background: var(--input-bg);
-      outline: none; width: 160px; color: var(--text); transition: 0.2s; height: 32px;
-    }
-    .bubble-input:focus { border-color: var(--primary); background: var(--card); }
-    .bubble-btn { width: 32px; height: 32px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--primary); color: white; border: none; cursor: pointer; }
-
-    .pantry-add-container { display: flex; justify-content: center; margin-top: 16px; width: 100%; }
-    .pantry-add-form { display: flex; align-items: center; gap: 8px; }
-    .user-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
-
-    .color-toggle {
-      width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 1px solid var(--border);
-      background: linear-gradient(135deg, #fb923c 50%, #38bdf8 50%);
-    }
-    .theme-toggle {
-      padding: 6px; border-radius: 50%; background: transparent; border: none;
-      cursor: pointer; color: var(--muted); display: flex; align-items: center; justify-content: center;
-    }
-    .theme-toggle:hover { color: var(--text); background: var(--input-bg); }
-
-    /* New Import Styles */
-    .import-option {
-      background: var(--input-bg); border: 1px solid var(--border);
-      border-radius: 12px; padding: 20px; text-align: center;
-      transition: 0.2s; cursor: pointer;
-    }
-    .import-option:hover { border-color: var(--primary); transform: translateY(-2px); }
-    .hidden-file-input { display: none; }
-
-    /* Small Delete Icon Button Style */
-    .btn-icon-sm {
-        width: 32px; height: 32px;
-        padding: 0;
-        display: flex; align-items: center; justify-content: center;
-        border-radius: 8px; border: none; cursor: pointer;
-    }
-
     /* Flex Utilities for non-Tailwind setups */
     .edit-row {
       display: flex;
@@ -639,8 +600,8 @@ const App = () => {
 
     /* Warning Banner */
     .warning-banner {
-      background-color: #ef4444;
-      color: white;
+      background-color: #f59e0b; /* Yellow warning for cache mode */
+      color: black;
       text-align: center;
       padding: 8px;
       font-size: 12px;
@@ -649,6 +610,14 @@ const App = () => {
       position: sticky;
       top: 0;
       z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .warning-banner.critical {
+      background-color: #ef4444; /* Red for blocks */
+      color: white;
     }
 
     /* Full Window Styles */
@@ -805,13 +774,29 @@ const App = () => {
 
     addLog(`Syncing ${safeUid.substring(0,5)}...`);
 
+    // SNAPSHOT LISTENERS WITH METADATA CHECK
     const unsubR = onSnapshot(recipesRef, (s) => {
       const data = s.docs.map(d => ({ id: d.id, ...d.data() }));
       setRecipes(data);
-      // Enhanced logging for diagnostics
+      
       const source = s.metadata.fromCache ? 'Cache' : 'Server';
+      setIsCacheMode(s.metadata.fromCache);
       addLog(`Fetched ${data.length} recipes [${source}]`);
-    }, (err) => { addLog(`R-Error: ${err.code}`); setRecipes([]); });
+
+      // UPDATE SYNC STATUS
+      if (s.metadata.hasPendingWrites) {
+          setSyncStatus('pending');
+      } else if (s.metadata.fromCache) {
+          setSyncStatus('offline'); // Technically offline/cache, possibly blocked
+      } else {
+          setSyncStatus('synced');
+      }
+
+    }, (err) => { 
+        addLog(`R-Error: ${err.code}`); 
+        setRecipes([]); 
+        setSyncStatus('error');
+    });
 
     const unsubP = onSnapshot(pantryRef, (s) => {
       const data = s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1305,7 +1290,10 @@ const App = () => {
         setActiveTab('recipes');
         addLog("Recipe Saved.");
       } catch (e) {
-        addLog(`Save Error: ${e.message}`);
+        addLog(`Save Error: ${e.code} - ${e.message}`);
+        if (e.code === 'permission-denied') {
+            alert("PERMISSION DENIED: Check Firebase Console Rules.");
+        }
       }
       setIsImporting(false);
     };
@@ -1381,6 +1369,56 @@ const App = () => {
       }
     };
     
+    // EXPORT DATA (Backup)
+    const handleExportData = () => {
+        if (!recipes || recipes.length === 0) {
+            alert("No recipes to export.");
+            return;
+        }
+        const dataStr = JSON.stringify(recipes, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `recipes_backup_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        addLog("Backup downloaded.");
+    };
+
+    // IMPORT DATA (Restore)
+    const handleImportJSON = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const importedRecipes = JSON.parse(event.target.result);
+                if (!Array.isArray(importedRecipes)) throw new Error("Invalid format");
+                
+                addLog(`Restoring ${importedRecipes.length} recipes...`);
+                let count = 0;
+                for (const recipe of importedRecipes) {
+                    // Remove ID to let Firestore generate new ones
+                    const { id, ...recipeData } = recipe; 
+                    await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
+                        ...recipeData,
+                        createdAt: Date.now()
+                    });
+                    count++;
+                }
+                addLog(`Restored ${count} recipes.`);
+                setTimeout(() => setActiveTab('recipes'), 1000);
+            } catch (err) {
+                addLog("Import failed: " + err.message);
+            }
+        };
+        reader.readAsText(file);
+        // Reset input
+        e.target.value = '';
+    };
+    
     // Admin Inspector: List All Collections
     const handleInspectDB = async () => {
         if (!user) return;
@@ -1398,6 +1436,10 @@ const App = () => {
             }
         } catch(e) {
             addLog(`Inspect Error: ${e.message}`);
+            // Check for specific block error again
+            if (e.message.includes("Failed to get document")) {
+               setIsBlocked(true);
+            }
         }
     };
 
@@ -1409,9 +1451,18 @@ const App = () => {
       
       {/* Network Block Warning */}
       {isBlocked && (
+        <div className="warning-banner critical">
+          <ShieldAlert size={14} className="inline mr-2" />
+          ⚠️ Connection Blocked! Disable Antivirus/VPN/AdBlock for this site.
+          <div className="text-[10px] mt-1 opacity-80">firestore.googleapis.com is being blocked.</div>
+        </div>
+      )}
+      
+      {/* Cache Mode Warning (Offline but not blocked) */}
+      {!isBlocked && isCacheMode && (
         <div className="warning-banner">
-          <AlertTriangle size={14} className="inline mr-2" />
-          ⚠️ Connection blocked! Disable AdBlocker to save recipes.
+          <CloudOff size={14} className="inline mr-2" />
+           ⚠️ Using Local Data (Not Syncing)
         </div>
       )}
 
@@ -1563,13 +1614,9 @@ const App = () => {
       {/* Removed title text, kept icon */}
       <div className="logo"><ChefHat size={28} strokeWidth={2.5}/></div>
       <nav className="tabs">
-      {['recipes','ingredients','import', 'logs'].map(id => <button key={id} onClick={() => setActiveTab(id)} className={`tab-btn ${activeTab === id ? 'active' : ''}`}>{id}</button>)}
+      {['recipes','pantry','import', 'logs'].map(id => <button key={id} onClick={() => setActiveTab(id)} className={`tab-btn ${activeTab === id ? 'active' : ''}`}>{id}</button>)}
       </nav>
       <div className="header-actions flex items-center gap-2">
-      <button className="color-toggle" onClick={() => setColorTheme(t => t === 'orange' ? 'blue' : 'orange')}></button>
-      <button className="theme-toggle" onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}>
-      {theme === 'light' ? <Moon size={20}/> : <Sun size={20}/>}
-      </button>
       <div className="auth-badge" onClick={() => (!user || user.isAnonymous) ? setIsAuthOpen(true) : handleSignOut()}>
       {(!user || user.isAnonymous || !user.photoURL)
         ? <User size={18}/>
@@ -1578,7 +1625,16 @@ const App = () => {
       <span className="text-xs font-bold">
       {(!user || user.isAnonymous) ? 'Sign In' : (user.displayName || 'Member')}
       </span>
+      {/* Sync Status Indicator */}
+        {syncStatus === 'synced' && <Cloud size={16} className="text-green-500" title="Synced" />}
+        {syncStatus === 'pending' && <RefreshCw size={16} className="text-yellow-500 animate-spin" title="Syncing..." />}
+        {syncStatus === 'offline' && <CloudOff size={16} className="text-gray-400" title="Offline (Local Mode)" />}
+        {syncStatus === 'error' && <CloudLightning size={16} className="text-red-500" title="Sync Error (Check Rules)" />}
       </div>
+      <button className="color-toggle" onClick={() => setColorTheme(t => t === 'orange' ? 'blue' : 'orange')}></button>
+      <button className="theme-toggle" onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}>
+      {theme === 'light' ? <Moon size={20}/> : <Sun size={20}/>}
+      </button>
       </div>
       </div>
       </header>
@@ -1619,7 +1675,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.22</p>
+            <p className="text-xs text-muted font-mono">v2.9.27</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1775,6 +1831,12 @@ const App = () => {
         <div className="card text-[11px] font-mono">
         <div className="flex justify-between items-center mb-4"><div className="font-black text-xs text-primary uppercase">System Status</div>
         <div className="flex gap-2">
+            <button onClick={handleExportData} 
+              title="Download Backup (JSON)" 
+              className={`p-1 rounded ${recipes && recipes.length > 0 && isCacheMode ? 'bg-green-100 dark:bg-green-900 animate-pulse' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
+              <Download size={14} className={recipes && recipes.length > 0 && isCacheMode ? "text-green-600 dark:text-green-400" : "text-green-500"}/>
+              {recipes && recipes.length > 0 && isCacheMode && <span className="ml-1 text-[10px] font-bold text-green-700 dark:text-green-300">Backup ({recipes.length})</span>}
+            </button>
             <button onClick={toggleLongPolling} className="text-xs px-2 py-1 bg-muted/20 rounded hover:bg-muted/40 transition-colors" title="Force Long Polling for Mobile">
                 {forceLongPolling ? "LongPolling: ON" : "LongPolling: OFF"}
             </button>
