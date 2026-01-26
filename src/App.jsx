@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
-  Save as SaveIcon, User, X, Moon, Sun, RefreshCw, Edit2,
-  Maximize2, CloudLightning, Database, Download, Upload, CloudOff, ShieldAlert,
-  Cloud, PenTool
+  Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
+  Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings,
+  AlertTriangle, ArrowDown, ArrowUp, FileText, Cloud, Edit,
+  Upload, Download, Database, PenTool, ShieldAlert, CloudOff // Added missing imports
 } from 'lucide-react';
 
 // Firebase Imports
@@ -18,7 +19,7 @@ import {
   getFirestore, collection, doc, onSnapshot, updateDoc,
   deleteDoc, addDoc, setDoc, enableIndexedDbPersistence,
   disableNetwork, enableNetwork, getDocs, initializeFirestore,
-  terminate, clearIndexedDbPersistence
+  terminate, clearIndexedDbPersistence, waitForPendingWrites
 } from 'firebase/firestore';
 
 /**
@@ -231,7 +232,7 @@ const App = () => {
   const [debugLogs, setDebugLogs] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isBlocked, setIsBlocked] = useState(false); 
-  const [showBlockInfo, setShowBlockInfo] = useState(false);
+  const [showBlockInfo, setShowBlockInfo] = useState(false); // Restored state
   const [isCacheMode, setIsCacheMode] = useState(false);
   const [syncStatus, setSyncStatus] = useState('synced');
   const isAutoLoginAttempted = useRef(false);
@@ -279,7 +280,7 @@ const App = () => {
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.38");
+    console.log("App Mounted - v2.9.42");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -310,6 +311,12 @@ const App = () => {
       window.removeEventListener('error', handleGlobalError);
     };
   }, []);
+
+  // Handle Tab Switching
+  const handleTabChange = (tabId) => {
+      setActiveTab(tabId);
+      setFullScreenRecipe(null); // Close full screen when switching tabs
+  };
 
   // Splitter Handlers
   const startResizing = () => {
@@ -1679,7 +1686,7 @@ const App = () => {
       {/* Removed title text, kept icon */}
       <div className="logo"><ChefHat size={28} strokeWidth={2.5}/></div>
       <nav className="tabs">
-      {['recipes','pantry','import', 'logs'].map(id => <button key={id} onClick={() => setActiveTab(id)} className={`tab-btn ${activeTab === id ? 'active' : ''}`}>{id}</button>)}
+      {['recipes','pantry','import', 'logs'].map(id => <button key={id} onClick={() => handleTabChange(id)} className={`tab-btn ${activeTab === id ? 'active' : ''}`}>{id}</button>)}
       </nav>
       <div className="header-actions flex items-center gap-2">
       <div className="auth-badge" onClick={() => (!user || user.isAnonymous) ? setIsAuthOpen(true) : handleSignOut()}>
@@ -1742,7 +1749,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.38</p>
+            <p className="text-xs text-muted font-mono">v2.9.40</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
