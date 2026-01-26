@@ -4,7 +4,7 @@ import {
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
   Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings,
   AlertTriangle, ArrowDown, ArrowUp, FileText, Cloud, Edit,
-  Upload, Download, Database, PenTool, ShieldAlert, CloudOff // Added missing imports
+  Upload, Download, Database, PenTool, ShieldAlert, CloudOff
 } from 'lucide-react';
 
 // Firebase Imports
@@ -232,7 +232,7 @@ const App = () => {
   const [debugLogs, setDebugLogs] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isBlocked, setIsBlocked] = useState(false); 
-  const [showBlockInfo, setShowBlockInfo] = useState(false); // Restored state
+  const [showBlockInfo, setShowBlockInfo] = useState(false);
   const [isCacheMode, setIsCacheMode] = useState(false);
   const [syncStatus, setSyncStatus] = useState('synced');
   const isAutoLoginAttempted = useRef(false);
@@ -280,7 +280,7 @@ const App = () => {
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.42");
+    console.log("App Mounted - v2.9.43");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -1266,6 +1266,15 @@ const App = () => {
                   addLog(`SAVE ERROR: ${saveError.message}`);
                   if (saveError.code === 'permission-denied') {
                       alert("PERMISSION DENIED: Firebase rules blocking write.");
+                  } else if (saveError.message.includes("timeout")) {
+                      // Silently catch timeout if in cache mode
+                      if (isCacheMode || syncStatus === 'offline') {
+                          addLog(`Saved to Device (Sync Pending)`);
+                      } else {
+                          addLog(`Save Error: ${saveError.message}`);
+                      }
+                  } else {
+                      addLog(`Save Error: ${saveError.message}`);
                   }
                }
 
@@ -1300,7 +1309,12 @@ const App = () => {
 
       try {
         addLog(`Saving to users/${user.uid}/recipes`);
-        await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), recipePayload);
+        
+        // ADD TIMEOUT TO MANUAL SAVE
+        const savePromise = addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), recipePayload);
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Save timeout")), 5000));
+
+        await Promise.race([savePromise, timeoutPromise]);
 
         // Reset form ONLY on success
         resetManualForm();
@@ -1308,7 +1322,20 @@ const App = () => {
         setActiveTab('recipes');
         addLog("Recipe Saved.");
       } catch (e) {
-        addLog(`Save Error: ${e.message}`);
+        if (e.code === 'permission-denied') {
+            alert("PERMISSION DENIED: Check Firebase Console Rules.");
+        } else if (e.message.includes("timeout")) {
+            if (isCacheMode || syncStatus === 'offline') {
+                addLog(`Saved to Device (Sync Pending)`);
+                // Assume success locally
+                resetManualForm();
+                setActiveTab('recipes');
+            } else {
+                alert("Save timed out! Check your network connection or ad-blocker.");
+            }
+        } else {
+             addLog(`Save Error: ${e.message}`);
+        }
       }
       setIsImporting(false);
     };
@@ -1450,7 +1477,7 @@ const App = () => {
         addLog(`Checking Recipes Path: ${recipePath}`);
         try {
             const rSnap = await getDocs(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'));
-            addLog(`> Recipes Found: ${rSnap.size}`);
+            addLog(`> Recipes Found: ${rSnap.size} [${rSnap.metadata.fromCache ? 'Cache' : 'Server'}]`);
             rSnap.forEach(d => console.log("Recipe:", d.id, d.data()));
         } catch(e) {
             addLog(`> Recipe Read Error: ${e.message}`);
@@ -1459,7 +1486,7 @@ const App = () => {
         addLog(`Checking Pantry Path: ${pantryPath}`);
         try {
             const pSnap = await getDocs(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'pantry'));
-            addLog(`> Pantry Items Found: ${pSnap.size}`);
+            addLog(`> Pantry Items Found: ${pSnap.size} [${pSnap.metadata.fromCache ? 'Cache' : 'Server'}]`);
         } catch(e) {
             addLog(`> Pantry Read Error: ${e.message}`);
         }
@@ -1749,7 +1776,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.40</p>
+            <p className="text-xs text-muted font-mono">v2.9.43</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
