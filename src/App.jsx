@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
-  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, 
+  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings,
   AlertTriangle, ArrowDown, ArrowUp, FileText, Cloud, Edit,
   Database, PenTool, ShieldAlert, CloudOff, Globe, Upload, Download
 } from 'lucide-react';
@@ -238,10 +238,6 @@ const App = () => {
   const [syncStatus, setSyncStatus] = useState('synced');
   const isAutoLoginAttempted = useRef(false);
 
-  // New States for Imports
-  const [urlImportMode, setUrlImportMode] = useState(false);
-  const [urlInput, setUrlInput] = useState('');
-
   // Connection Settings State
   const [forceLongPolling, setForceLongPolling] = useState(() => {
       const stored = localStorage.getItem('rm_force_polling');
@@ -252,6 +248,9 @@ const App = () => {
   const [fullScreenRecipe, setFullScreenRecipe] = useState(null);
   const [splitRatio, setSplitRatio] = useState(50); // percentage for left column
   const isResizingRef = useRef(false);
+
+  // New State for Test API Key
+  const [testApiKey, setTestApiKey] = useState('');
 
   // Pantry UI State
   const [activePantryCategory, setActivePantryCategory] = useState("Meats");
@@ -265,7 +264,7 @@ const App = () => {
   const [editRecipeForm, setEditRecipeForm] = useState({ name: '', ingredients: '', instructions: '' });
 
   // Delete Confirmation State
-  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id: string, name: string, collection: 'pantry'|'recipes' }
 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -278,13 +277,12 @@ const App = () => {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 }); // NEW: Batch State
   const [manual, setManual] = useState({ name: '', ings: '', inst: '', source: '' });
   const [rawTextImport, setRawTextImport] = useState('');
-  
   const fileInputRef = useRef(null);
-  const cameraInputRef = useRef(null); // Ref for Camera
   const jsonImportRef = useRef(null); // Ref for JSON import
+  const cameraInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.49");
+    console.log("App Mounted - v2.9.50");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -363,6 +361,7 @@ const App = () => {
     const availableSet = new Set();
     const dbStatusMap = new Map();
 
+    // 1. Add all items from DB that are 'have'
     items.forEach(i => {
       const lowerName = (i.name || "").toLowerCase();
       const isAvailable = i.status === 'have' || (i.status === undefined && i.available === true);
@@ -370,6 +369,7 @@ const App = () => {
       if (isAvailable) availableSet.add(lowerName);
     });
 
+      // 2. Add Master List defaults (only if not already decided by DB)
       Object.keys(MASTER_INGREDIENTS).forEach(cat => {
         MASTER_INGREDIENTS[cat].forEach(name => {
           const lowerName = name.toLowerCase();
@@ -1832,7 +1832,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.48</p>
+            <p className="text-xs text-muted font-mono">v2.9.50</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
