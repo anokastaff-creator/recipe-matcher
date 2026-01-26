@@ -3,7 +3,7 @@ import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
   Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings, Database, AlertTriangle, Download, Upload, CloudOff, ShieldAlert,
-  Cloud
+  Cloud, CloudUpload, CloudAlert, CloudCheck
 } from 'lucide-react';
 
 // Firebase Imports
@@ -171,6 +171,33 @@ const toTitleCase = (str) => {
   return String(str).toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
+const fetchWithRetry = async (url, options, logFn, maxRetries = 5) => {
+  let lastError = null;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      logFn(`Attempt ${i + 1}/${maxRetries}: sending request...`);
+      const response = await fetch(url, options);
+      if (response.ok) {
+        logFn(`Success: HTTP ${response.status}`);
+        return response;
+      }
+      const errorText = await response.text();
+      const errorMsg = `HTTP ${response.status}: ${errorText.substring(0, 150)}...`;
+      logFn(`Fail: ${errorMsg}`);
+      lastError = errorMsg;
+    } catch (err) {
+      logFn(`Network Error: ${err.message}`);
+      lastError = err.message;
+    }
+    if (i < maxRetries - 1) {
+      const delay = Math.pow(2, i) * 1000;
+      logFn(`Retrying in ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error(lastError || "Connection failed.");
+};
+
 const parseAndSanitizeAIJSON = (text) => {
   try {
     return JSON.parse(text);
@@ -278,7 +305,7 @@ const App = () => {
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.27");
+    console.log("App Mounted - v2.9.26");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -1232,25 +1259,23 @@ const App = () => {
             if (recipeData) {
                addLog(`AI processed. Saving ${recipeData.name}...`); // Debug log
 
-               // Race addDoc against a 5s timeout to prevent hanging
-               const savePromise = addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
-                name: recipeData.name,
-                ingredients: recipeData.ingredients,
-                instructions: recipeData.instructions,
-                source: "AI Batch Scan",
-                createdAt: Date.now()
-              });
+               // Catch permission errors explicitly during save
+               try {
+                  await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
+                    name: recipeData.name,
+                    ingredients: recipeData.ingredients,
+                    instructions: recipeData.instructions,
+                    source: "AI Batch Scan",
+                    createdAt: Date.now()
+                  });
+                  addLog(`Success: ${recipeData.name}`);
+               } catch (saveError) {
+                  addLog(`SAVE ERROR: ${saveError.code} - ${saveError.message}`);
+                  if (saveError.code === 'permission-denied') {
+                      alert("PERMISSION DENIED: Firebase rules blocking write.");
+                  }
+               }
 
-              const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Save timeout")), 5000));
-
-              try {
-                await Promise.race([savePromise, timeoutPromise]);
-                addLog(`Saved: ${recipeData.name}`);
-              } catch (saveErr) {
-                 // If it times out or fails, we assume it might have queued locally or failed.
-                 // We log and continue so the batch doesn't die.
-                 addLog(`Save warning: ${saveErr.message} (might be queued offline)`);
-              }
             } else {
               addLog(`Failed: File ${i + 1} returned no data.`);
             }
@@ -1675,7 +1700,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.27</p>
+            <p className="text-xs text-muted font-mono">v2.9.26</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1767,10 +1792,11 @@ const App = () => {
             </div>
           </div>
 
-          <div className="import-option opacity-50 cursor-not-allowed" title="Requires Vercel Backend">
-            <LinkIcon className="mx-auto mb-2 text-muted" size={24}/>
-            <div className="text-sm font-bold text-muted">Import URL</div>
-            <div className="text-[10px] text-muted">Requires Vercel Backend</div>
+          <div className="import-option" onClick={() => jsonImportRef.current?.click()}>
+             <input type="file" ref={jsonImportRef} className="hidden-file-input" accept=".json" onChange={handleImportJSON} />
+             <Upload className="mx-auto mb-2 text-primary" size={24}/>
+             <div className="text-sm font-bold">Restore JSON</div>
+             <div className="text-[10px] text-muted">Load backup file</div>
           </div>
         </div>
 
