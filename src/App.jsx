@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
-  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings, Database
+  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings, Database, AlertTriangle
 } from 'lucide-react';
 
 // Firebase Imports
@@ -17,7 +17,7 @@ import {
   getFirestore, collection, doc, onSnapshot, updateDoc,
   deleteDoc, addDoc, setDoc, enableIndexedDbPersistence,
   disableNetwork, enableNetwork, getDocs, initializeFirestore,
-  terminate, clearIndexedDbPersistence
+  terminate, clearIndexedDbPersistence, waitForPendingWrites
 } from 'firebase/firestore';
 
 /**
@@ -170,33 +170,6 @@ const toTitleCase = (str) => {
   return String(str).toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
-const fetchWithRetry = async (url, options, logFn, maxRetries = 5) => {
-  let lastError = null;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      logFn(`Attempt ${i + 1}/${maxRetries}: sending request...`);
-      const response = await fetch(url, options);
-      if (response.ok) {
-        logFn(`Success: HTTP ${response.status}`);
-        return response;
-      }
-      const errorText = await response.text();
-      const errorMsg = `HTTP ${response.status}: ${errorText.substring(0, 150)}...`;
-      logFn(`Fail: ${errorMsg}`);
-      lastError = errorMsg;
-    } catch (err) {
-      logFn(`Network Error: ${err.message}`);
-      lastError = err.message;
-    }
-    if (i < maxRetries - 1) {
-      const delay = Math.pow(2, i) * 1000;
-      logFn(`Retrying in ${delay}ms...`);
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
-  throw new Error(lastError || "Connection failed.");
-};
-
 const parseAndSanitizeAIJSON = (text) => {
   try {
     return JSON.parse(text);
@@ -256,6 +229,7 @@ const App = () => {
   const [colorTheme, setColorTheme] = useState(() => localStorage.getItem('rm_color_theme') || 'orange');
   const [debugLogs, setDebugLogs] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isBlocked, setIsBlocked] = useState(false); // New state for ad-block detection
   const isAutoLoginAttempted = useRef(false);
 
   // Connection Settings State
@@ -284,7 +258,7 @@ const App = () => {
   const [editRecipeForm, setEditRecipeForm] = useState({ name: '', ingredients: '', instructions: '' });
 
   // Delete Confirmation State
-  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id: string, name: string, collection: 'pantry'|'recipes' }
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -293,15 +267,14 @@ const App = () => {
   const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   const [isImporting, setIsImporting] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false); // AI Analysis State
-  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 }); // NEW: Batch State
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [manual, setManual] = useState({ name: '', ings: '', inst: '', source: '' });
   const [rawTextImport, setRawTextImport] = useState('');
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.21");
-    // Ensure CSS root variables are set correctly on mount
+    console.log("App Mounted - v2.9.22");
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
 
@@ -310,9 +283,19 @@ const App = () => {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // Global Error Listener for Ad-Block detection
+    const handleGlobalError = (event) => {
+        if (event.message && event.message.includes('ERR_BLOCKED_BY_CLIENT')) {
+            setIsBlocked(true);
+            addLog("CRITICAL: Connection blocked by extension!");
+        }
+    };
+    window.addEventListener('error', handleGlobalError);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('error', handleGlobalError);
     };
   }, []);
 
@@ -343,7 +326,8 @@ const App = () => {
   const addLog = (msg) => {
     const time = new Date().toLocaleTimeString();
     setDebugLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 30));
-    console.log(`[RecipeMatcher] ${msg}`); // Also log to console for robust debugging
+    console.log(`[RecipeMatcher] ${msg}`); 
+    if (msg.includes('ERR_BLOCKED_BY_CLIENT')) setIsBlocked(true);
   };
 
   const getSafeUid = (u) => String(u?.uid || 'guest').replace(/\//g, '_');
@@ -354,7 +338,6 @@ const App = () => {
     const availableSet = new Set();
     const dbStatusMap = new Map();
 
-    // 1. Add all items from DB that are 'have'
     items.forEach(i => {
       const lowerName = (i.name || "").toLowerCase();
       const isAvailable = i.status === 'have' || (i.status === undefined && i.available === true);
@@ -362,7 +345,6 @@ const App = () => {
       if (isAvailable) availableSet.add(lowerName);
     });
 
-      // 2. Add Master List defaults (only if not already decided by DB)
       Object.keys(MASTER_INGREDIENTS).forEach(cat => {
         MASTER_INGREDIENTS[cat].forEach(name => {
           const lowerName = name.toLowerCase();
@@ -654,6 +636,20 @@ const App = () => {
     .bg-red-500 { background-color: #ef4444; color: white; }
     .bg-slate-500 { background-color: #64748b; color: white; }
     .bg-green-600 { background-color: #16a34a; color: white; }
+
+    /* Warning Banner */
+    .warning-banner {
+      background-color: #ef4444;
+      color: white;
+      text-align: center;
+      padding: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      width: 100%;
+      position: sticky;
+      top: 0;
+      z-index: 9999;
+    }
 
     /* Full Window Styles */
     .full-window-overlay {
@@ -1410,6 +1406,15 @@ const App = () => {
     return (
       <div className={`app-container ${theme}`}>
       <div className="fixed-background"></div>
+      
+      {/* Network Block Warning */}
+      {isBlocked && (
+        <div className="warning-banner">
+          <AlertTriangle size={14} className="inline mr-2" />
+          ⚠️ Connection blocked! Disable AdBlocker to save recipes.
+        </div>
+      )}
+
       {/* Background Image */}
       <img src="/mechef.png" alt="" className="bg-bottom-right" />
 
@@ -1614,7 +1619,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.21</p>
+            <p className="text-xs text-muted font-mono">v2.9.22</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
