@@ -110,32 +110,32 @@ const MASTER_INGREDIENTS = {
   "Produce": [
     "Onion", "Red Onion", "Garlic", "Ginger", "Scallion", "Shallot", "Lemongrass", "Celery",
     "Carrot", "Bell Pepper", "Jalapeño", "Poblano", "Serrano Pepper", "Bird’s Eye Chili",
-    "Roma Tomato", "Tomatillo", "Russet Potato", "Cabbage",
+    "Roma Tomato", "Tomatillo", "Russet Potato", "Cabbage", "Tomatoes",
     "Bok Choy", "Broccoli", "Cauliflower", "Corn", "Button Mushroom", "Shiitake Mushroom", "Eggplant",
     "Zucchini", "Cucumber", "Spinach", "Kale", "Green Bean", "Snow Pea", "Asparagus", "Radish",
     "Bean Sprout", "Avocado", "Lime", "Lemon", "Apple", "Mango", "Pineapple", "Coconut", "Tamarind",
     "Fresh Basil", "Thai Basil", "Holy Basil", "Cilantro", "Parsley", "Dill", "Chives", "Mint", "Green Pea",
-    "Portabella Mushroom", "Mushrooms", "Potatoes", "Red Pepper"
+    "Portabella Mushroom", "Mushrooms", "Potatoes", "Red Pepper", "Guacamole"
   ],
   "Pantry": [
     "Dried Ancho Chili", "Dried Red Chili", "Jasmine Rice", "White Rice", "Brown Rice", "Arborio Rice", "Sticky Rice", "Gnocchi",
-    "Pasta", "Egg Noodle", "Rice Noodle", "Glass Noodle", "Corn Tortilla", "Flour Tortilla",
-    "White Bread", "Rye Bread", "Breadcrumbs", "Cornmeal", "Masa Harina", "Oats", "All-Purpose Flour",
+    "Pasta", "Egg Noodle", "Rice Noodle", "Glass Noodle", "Corn Tortilla", "Flour Tortilla", "Green Chilies",
+    "White Bread", "Rye Bread", "Breadcrumbs", "Cornmeal", "Masa Harina", "Oats", "Flour", "Saltines", "Crackers",
     "Cornstarch", "Potato Starch", "Baking Powder", "Baking Soda", "Yeast", "Chicken Stock", "Beef Stock", "Chicken Broth",
-    "Canned San Marzano Tomato", "Tomato Paste", "Tomato Sauce", "Coconut Milk", "Coconut Cream",
+    "Canned San Marzano Tomato", "Tomato Paste", "Tomato Sauce", "Coconut Milk", "Coconut Cream", "Potato Chips",
     "Pickle", "Sauerkraut", "Capers", "Black Olive", "Peanut Butter", "Roasted Peanut", "Walnut",
     "Pine Nut", "Almond", "Vegetable Oil", "Canola Oil", "Olive Oil", "Lard", "Sesame Oil", "Peanut Oil", "Coconut Oil",
     "White Vinegar", "Apple Cider Vinegar", "Balsamic Vinegar", "Red Wine Vinegar", "Rice Vinegar", "Rice Wine Vinegar",
     "Black Vinegar", "Honey", "Maple Syrup", "Sugar", "Brown Sugar", "Palm Sugar", "Semi-sweet Chocolate",
     "Cocoa Powder", "Vanilla Extract", "Powdered Sugar", "Gelatin", "Chicken Bouillon", "Lasagna Sheet",
     "Taco Shell", "Tortilla Chip", "Sesame Seed", "Dried Cranberry", "Almond Flour", "Molasses", "Agave Nectar",
-    "Cream of Chicken Soup", "Cream of Mushroom Soup", "Pimentos", "Beef Bouillon", "Noodles", "Diced Tomatoes", "Spaghetti", "Rice", "Long Grain Rice"
+    "Cream of Chicken Soup", "Cream of Mushroom Soup", "Pimentos", "Beef Bouillon", "Noodles", "Diced Tomatoes", "Spaghetti", "Rice", "Long Grain Rice", "Linguine"
   ],
   "Dairy": [
     "Whole Milk", "Heavy Cream", "Sour Cream", "Yogurt", "Buttermilk", "Condensed Milk", "Evaporated Milk",
-    "Cheddar Cheese", "Low Moisture Mozzarella", "Fresh Mozzarella", "Parmesan Cheese", "Ricotta Cheese",
+    "Cheddar Cheese", "Low Moisture Mozzarella", "Fresh Mozzarella", "Parmesan", "Ricotta Cheese",
     "Provolone Cheese", "Monterey Jack Cheese", "Queso Fresco", "Cotija Cheese", "Oaxaca Cheese",
-    "Swiss Cheese", "Cream Cheese", "Gouda Cheese", "Butter", "Egg",
+    "Swiss Cheese", "Cream Cheese", "Gouda Cheese", "Butter", "Egg", "Mexican Cheese",
     "Milk"
   ],
   "Sauces": [
@@ -152,11 +152,11 @@ const MASTER_INGREDIENTS = {
     "Rosemary", "Sage", "Bay Leaf", "Cinnamon", "Nutmeg", "Clove", "Allspice", "Caraway Seed",
     "Fennel Seed", "Ground Coriander", "Turmeric", "Star Anise", "Sichuan Peppercorn", "Five Spice Powder",
     "Garlic Powder", "Onion Powder", "MSG", "Curry Powder", "Italian Seasoning", "Taco Seasoning", "Saffron",
-    "Pepper"
+    "Pepper", "Cajun Seasoning"
   ],
   "Other": [
     "Red Wine", "White Wine", "Shaoxing Wine", "Beer",
-    "Sherry", "Water"
+    "Sherry", "Water", "Pico de gallo"
   ]
 };
 
@@ -1563,7 +1563,7 @@ const App = () => {
       {/* Removed title text, kept icon */}
       <div className="logo"><ChefHat size={28} strokeWidth={2.5}/></div>
       <nav className="tabs">
-      {['recipes','pantry','import', 'logs'].map(id => <button key={id} onClick={() => setActiveTab(id)} className={`tab-btn ${activeTab === id ? 'active' : ''}`}>{id}</button>)}
+      {['recipes','ingredients','import', 'logs'].map(id => <button key={id} onClick={() => setActiveTab(id)} className={`tab-btn ${activeTab === id ? 'active' : ''}`}>{id}</button>)}
       </nav>
       <div className="header-actions flex items-center gap-2">
       <button className="color-toggle" onClick={() => setColorTheme(t => t === 'orange' ? 'blue' : 'orange')}></button>
