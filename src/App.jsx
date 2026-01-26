@@ -234,6 +234,7 @@ const App = () => {
   const [isBlocked, setIsBlocked] = useState(false); 
   const [showBlockInfo, setShowBlockInfo] = useState(false);
   const [isCacheMode, setIsCacheMode] = useState(false);
+  const [hasPending, setHasPending] = useState(false); // New: Track pending writes
   const [syncStatus, setSyncStatus] = useState('synced');
   const isAutoLoginAttempted = useRef(false);
 
@@ -280,7 +281,7 @@ const App = () => {
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.45");
+    console.log("App Mounted - v2.9.46");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -802,10 +803,13 @@ const App = () => {
       // UPDATE SYNC STATUS
       if (s.metadata.hasPendingWrites) {
           setSyncStatus('pending');
+          setHasPending(true);
       } else if (s.metadata.fromCache) {
           setSyncStatus('offline'); // Technically offline/cache, possibly blocked
+          setHasPending(false);
       } else {
           setSyncStatus('synced');
+          setHasPending(false);
       }
 
     }, (err) => { 
@@ -1303,7 +1307,7 @@ const App = () => {
         
         // ADD TIMEOUT TO MANUAL SAVE
         const savePromise = addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), recipePayload);
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Save timeout")), 5000));
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Save timeout - Connection poor or blocked")), 5000));
 
         await Promise.race([savePromise, timeoutPromise]);
 
@@ -1314,6 +1318,18 @@ const App = () => {
         addLog("Recipe Saved.");
       } catch (e) {
         addLog(`Save Error: ${e.message}`);
+        if (e.code === 'permission-denied') {
+            alert("PERMISSION DENIED: Check Firebase Console Rules.");
+        } else if (e.message.includes("timeout")) {
+            if (isCacheMode || syncStatus === 'offline') {
+                addLog(`Saved to Device (Sync Pending)`);
+                // Assume success locally
+                resetManualForm();
+                setActiveTab('recipes');
+            } else {
+                alert("Save timed out! Check your network connection or ad-blocker.");
+            }
+        }
       }
       setIsImporting(false);
     };
@@ -1477,13 +1493,17 @@ const App = () => {
         if (!user) return;
         addLog("Attempting test write...");
         try {
-            await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'debug_tests'), {
+            const testPromise = addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'debug_tests'), {
                 timestamp: Date.now(),
                 test: true
             });
+            // 5s timeout on test
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Write timeout (Blocked)")), 5000));
+            await Promise.race([testPromise, timeoutPromise]);
+            
             addLog("Write Success! Database is writable.");
         } catch(e) {
-            addLog(`Write Failed: ${e.code} - ${e.message}`);
+            addLog(`Write Failed: ${e.message}`);
         }
     };
 
@@ -1754,7 +1774,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.44</p>
+            <p className="text-xs text-muted font-mono">v2.9.46</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1949,6 +1969,7 @@ const App = () => {
           <div className="col-span-2"><span className="text-muted">Email:</span> {user ? user.email : 'None'}</div>
           <div><span className="text-muted">Recipes:</span> {recipes ? recipes.length : 0}</div>
           <div><span className="text-muted">Browser Net:</span> {isOnline ? 'Online' : 'Offline'}</div>
+          <div><span className="text-muted">Pending Uploads:</span> {hasPending ? <span className="text-yellow-500 font-bold">YES</span> : 'No'}</div>
           <div className="col-span-2 text-[10px] text-muted truncate">UA: {typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown'}</div>
         </div>
 
