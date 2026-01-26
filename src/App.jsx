@@ -231,7 +231,7 @@ const App = () => {
   const [debugLogs, setDebugLogs] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isBlocked, setIsBlocked] = useState(false); 
-  const [showBlockInfo, setShowBlockInfo] = useState(false); // RESTORED STATE
+  const [showBlockInfo, setShowBlockInfo] = useState(false); // Restored state
   const [isCacheMode, setIsCacheMode] = useState(false);
   const [syncStatus, setSyncStatus] = useState('synced');
   const isAutoLoginAttempted = useRef(false);
@@ -279,7 +279,7 @@ const App = () => {
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.32");
+    console.log("App Mounted - v2.9.29");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -298,6 +298,11 @@ const App = () => {
         }
     };
     window.addEventListener('error', handleGlobalError);
+
+    // Force network connection on mount
+    if (fb.db) {
+        enableNetwork(fb.db).catch(e => console.warn("Network enable warning:", e));
+    }
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -1664,7 +1669,7 @@ const App = () => {
       {/* Sync Status Indicator */}
         <div className="flex items-center gap-2 bg-input-bg px-3 py-1 rounded-full border border-border">
           {syncStatus === 'synced' && <><Cloud size={16} className="text-green-600"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Synced</span></>}
-          {syncStatus === 'pending' && <><RefreshCw size={16} className="animate-spin text-yellow-600"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Saving...</span></>}
+          {syncStatus === 'pending' && <><RefreshCw size={16} className="animate-spin text-yellow-500"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Saving...</span></>}
           {syncStatus === 'offline' && <><CloudOff size={16} className="text-gray-500"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Offline</span></>}
           {syncStatus === 'error' && <><ShieldAlert size={16} className="text-red-600"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Blocked</span></>}
         </div>
@@ -1713,7 +1718,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.32</p>
+            <p className="text-xs text-muted font-mono">v2.9.27</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
