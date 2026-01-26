@@ -16,7 +16,8 @@ import {
 import {
   getFirestore, collection, doc, onSnapshot, updateDoc,
   deleteDoc, addDoc, setDoc, enableIndexedDbPersistence,
-  disableNetwork, enableNetwork, getDocs, initializeFirestore
+  disableNetwork, enableNetwork, getDocs, initializeFirestore,
+  terminate, clearIndexedDbPersistence
 } from 'firebase/firestore';
 
 /**
@@ -169,6 +170,33 @@ const toTitleCase = (str) => {
   return String(str).toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
+const fetchWithRetry = async (url, options, logFn, maxRetries = 5) => {
+  let lastError = null;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      logFn(`Attempt ${i + 1}/${maxRetries}: sending request...`);
+      const response = await fetch(url, options);
+      if (response.ok) {
+        logFn(`Success: HTTP ${response.status}`);
+        return response;
+      }
+      const errorText = await response.text();
+      const errorMsg = `HTTP ${response.status}: ${errorText.substring(0, 150)}...`;
+      logFn(`Fail: ${errorMsg}`);
+      lastError = errorMsg;
+    } catch (err) {
+      logFn(`Network Error: ${err.message}`);
+      lastError = err.message;
+    }
+    if (i < maxRetries - 1) {
+      const delay = Math.pow(2, i) * 1000;
+      logFn(`Retrying in ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error(lastError || "Connection failed.");
+};
+
 const parseAndSanitizeAIJSON = (text) => {
   try {
     return JSON.parse(text);
@@ -272,7 +300,7 @@ const App = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.19");
+    console.log("App Mounted - v2.9.20");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -1340,6 +1368,23 @@ const App = () => {
         window.location.reload();
     };
 
+    // Manual Reset Data
+    const handleResetData = async () => {
+      if (!confirm("This will clear local cache and reload. Your saved recipes are safe in the cloud. Continue?")) return;
+      try {
+        addLog("Terminating DB connection...");
+        await terminate(fb.db);
+        addLog("Clearing persistence...");
+        await clearIndexedDbPersistence(fb.db);
+        addLog("Done. Reloading...");
+        window.location.reload();
+      } catch (e) {
+        addLog("Reset failed: " + e.message);
+        // Force reload anyway if stuck
+        setTimeout(() => window.location.reload(), 2000);
+      }
+    };
+
     if (isLoading) return <div className="app-container dark" style={{justifyContent:'center', display:'flex', alignItems:'center'}}><Loader2 className="animate-spin text-orange-500 mx-auto mb-4" size={56}/></div>;
 
     return (
@@ -1549,7 +1594,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.19</p>
+            <p className="text-xs text-muted font-mono">v2.9.20</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1709,6 +1754,7 @@ const App = () => {
                 {forceLongPolling ? "LongPolling: ON" : "LongPolling: OFF"}
             </button>
             <button onClick={handleReconnect} title="Force Reconnect/Ping" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"><CloudLightning size={14} className="text-primary"/></button>
+            <button onClick={handleResetData} title="Clear Cache & Reset" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-red-500"><Trash2 size={14}/></button>
             <button onClick={() => window.location.reload()} title="Reload Page" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"><RefreshCw size={14}/></button>
         </div>
         </div>
