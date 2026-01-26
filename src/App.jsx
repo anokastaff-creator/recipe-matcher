@@ -4,7 +4,7 @@ import {
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
   Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings,
   AlertTriangle, ArrowDown, ArrowUp, FileText, Cloud, Edit,
-  Upload, Download, Database, PenTool, ShieldAlert, CloudOff
+  Database, PenTool, ShieldAlert, CloudOff, Globe
 } from 'lucide-react';
 
 // Firebase Imports
@@ -281,7 +281,7 @@ const App = () => {
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.46");
+    console.log("App Mounted - v2.9.47");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -1493,18 +1493,36 @@ const App = () => {
         if (!user) return;
         addLog("Attempting test write...");
         try {
-            const testPromise = addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'debug_tests'), {
+            await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'debug_tests'), {
                 timestamp: Date.now(),
                 test: true
             });
-            // 5s timeout on test
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Write timeout (Blocked)")), 5000));
-            await Promise.race([testPromise, timeoutPromise]);
-            
             addLog("Write Success! Database is writable.");
         } catch(e) {
-            addLog(`Write Failed: ${e.message}`);
+            addLog(`Write Failed: ${e.code} - ${e.message}`);
         }
+    };
+    
+    // Test DNS/Network
+    const handleTestDNS = async () => {
+      addLog("Testing Internet Connectivity...");
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        // Using a reliable Google endpoint that allows CORS
+        const response = await fetch('https://www.gstatic.com/generate_204', { 
+            method: 'GET',
+            mode: 'no-cors',
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        addLog("DNS/Internet Test: SUCCESS (Reachable)");
+      } catch (e) {
+        addLog(`DNS/Internet Test: FAILED (${e.message})`);
+        if (e.name === 'AbortError') {
+            addLog("Cause: Request Timeout. Check Firewall/DNS.");
+        }
+      }
     };
 
     if (isLoading) return <div className="app-container dark" style={{justifyContent:'center', display:'flex', alignItems:'center'}}><Loader2 className="animate-spin text-orange-500 mx-auto mb-4" size={56}/></div>;
@@ -1774,7 +1792,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.46</p>
+            <p className="text-xs text-muted font-mono">v2.9.47</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1952,6 +1970,10 @@ const App = () => {
             <button onClick={handleWriteTest} title="Test Write Permissions" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
                 <PenTool size={14}/>
                 <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Test Write</span>
+            </button>
+            <button onClick={handleTestDNS} title="Test Internet/DNS" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
+                <Globe size={14}/>
+                <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Test DNS</span>
             </button>
             <button onClick={handleResetData} title="Clear Cache & Reset" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-red-500 flex items-center gap-2">
                 <Trash2 size={14}/>
