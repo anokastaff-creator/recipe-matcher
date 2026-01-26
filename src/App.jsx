@@ -280,7 +280,7 @@ const App = () => {
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.43");
+    console.log("App Mounted - v2.9.44");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -304,6 +304,11 @@ const App = () => {
     if (fb.db) {
         enableNetwork(fb.db).catch(e => console.warn("Network enable warning:", e));
     }
+    
+    // Log configuration status on startup to help debug
+    const pollingStatus = localStorage.getItem('rm_force_polling');
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    addLog(`Config: LongPolling=${pollingStatus === 'true' ? 'ON' : 'OFF'} (UA Detect Mobile: ${isMobile})`);
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -1266,15 +1271,6 @@ const App = () => {
                   addLog(`SAVE ERROR: ${saveError.message}`);
                   if (saveError.code === 'permission-denied') {
                       alert("PERMISSION DENIED: Firebase rules blocking write.");
-                  } else if (saveError.message.includes("timeout")) {
-                      // Silently catch timeout if in cache mode
-                      if (isCacheMode || syncStatus === 'offline') {
-                          addLog(`Saved to Device (Sync Pending)`);
-                      } else {
-                          addLog(`Save Error: ${saveError.message}`);
-                      }
-                  } else {
-                      addLog(`Save Error: ${saveError.message}`);
                   }
                }
 
