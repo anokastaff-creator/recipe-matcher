@@ -3,7 +3,7 @@ import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
   Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings, Database, AlertTriangle, Download, Upload, CloudOff, ShieldAlert,
-  Cloud, CloudUpload, CloudAlert, CloudCheck
+  Cloud
 } from 'lucide-react';
 
 // Firebase Imports
@@ -278,7 +278,7 @@ const App = () => {
   const jsonImportRef = useRef(null); // Ref for JSON import
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.27");
+    console.log("App Mounted - v2.9.28");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
@@ -1624,10 +1624,12 @@ const App = () => {
       {(!user || user.isAnonymous) ? 'Sign In' : (user.displayName || 'Member')}
       </span>
       {/* Sync Status Indicator */}
-        {syncStatus === 'synced' && <Cloud size={16} className="text-green-500" title="Synced" />}
-        {syncStatus === 'pending' && <RefreshCw size={16} className="text-yellow-500 animate-spin" title="Syncing..." />}
-        {syncStatus === 'offline' && <CloudOff size={16} className="text-gray-400" title="Offline (Local Mode)" />}
-        {syncStatus === 'error' && <CloudLightning size={16} className="text-red-500" title="Sync Error (Check Rules)" />}
+        <div className="flex items-center gap-1 bg-input-bg px-2 py-1 rounded-full border border-border">
+          {syncStatus === 'synced' && <><Cloud size={14} className="text-green-600"/><span className="text-xs font-bold text-green-700">Synced</span></>}
+          {syncStatus === 'pending' && <><RefreshCw size={14} className="animate-spin text-yellow-600"/><span className="text-xs font-bold text-yellow-700">Saving...</span></>}
+          {syncStatus === 'offline' && <><CloudOff size={14} className="text-gray-500"/><span className="text-xs font-bold text-gray-600">Offline</span></>}
+          {syncStatus === 'error' && <><ShieldAlert size={14} className="text-red-600"/><span className="text-xs font-bold text-red-700">Blocked</span></>}
+        </div>
       </div>
       <button className="color-toggle" onClick={() => setColorTheme(t => t === 'orange' ? 'blue' : 'orange')}></button>
       <button className="theme-toggle" onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}>
@@ -1673,7 +1675,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.27</p>
+            <p className="text-xs text-muted font-mono">v2.9.28</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
