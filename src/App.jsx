@@ -2,9 +2,9 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
-  Camera, Link as LinkIcon, Layers, Bug, Key, Maximize2, Wifi, WifiOff, CloudLightning, Settings,
+  Link as LinkIcon, Layers, Key, Maximize2, Wifi, WifiOff, CloudLightning, 
   AlertTriangle, ArrowDown, ArrowUp, FileText, Cloud, Edit,
-  Database, PenTool, ShieldAlert, CloudOff, Globe, Upload, Download
+  Database, PenTool, ShieldAlert, CloudOff, Globe, Upload, Download, Camera, Copy, FileJson
 } from 'lucide-react';
 
 // Firebase Imports
@@ -17,9 +17,8 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore, collection, doc, onSnapshot, updateDoc,
-  deleteDoc, addDoc, setDoc, enableIndexedDbPersistence,
-  disableNetwork, enableNetwork, getDocs, initializeFirestore,
-  terminate, clearIndexedDbPersistence, waitForPendingWrites
+  deleteDoc, addDoc, enableIndexedDbPersistence,
+  disableNetwork, enableNetwork, initializeFirestore
 } from 'firebase/firestore';
 
 /**
@@ -58,24 +57,10 @@ const initializeFirebase = () => {
 
     if (!getApps().length) {
       app = initializeApp(firebaseConfig);
-      
-      // Mobile Connectivity Fix: Allow Manual Override via LocalStorage
-      const storedPolling = localStorage.getItem('rm_force_polling');
-      const isMobileUA = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      
-      // Use Long Polling if manually set OR if detected as mobile (and not manually disabled)
-      const useLongPolling = storedPolling === 'true' || (isMobileUA && storedPolling !== 'false');
+      db = getFirestore(app);
 
-      db = initializeFirestore(app, {
-        experimentalForceLongPolling: useLongPolling,
-      });
-
-      console.log(`[Firebase] Initialized. LongPolling: ${useLongPolling} (UserAgent: ${isMobileUA}, Manual: ${storedPolling})`);
-
-      enableIndexedDbPersistence(db).then(() => {
-          console.log("[Firebase] Persistence enabled");
-      }).catch((err) => {
-          console.warn("Persistence failed (common in private/incognito windows):", err.code);
+      enableIndexedDbPersistence(db).catch((err) => {
+          console.warn("Persistence failed:", err.code);
       });
     } else {
       app = getApp();
@@ -229,32 +214,12 @@ const App = () => {
   const [pantry, setPantry] = useState(null);
   const [theme, setTheme] = useState(() => localStorage.getItem('rm_theme_v143') || 'dark');
   const [colorTheme, setColorTheme] = useState(() => localStorage.getItem('rm_color_theme') || 'orange');
-  const [debugLogs, setDebugLogs] = useState([]);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isBlocked, setIsBlocked] = useState(false); 
-  const [showBlockInfo, setShowBlockInfo] = useState(false);
-  const [isCacheMode, setIsCacheMode] = useState(false);
-  const [hasPending, setHasPending] = useState(false);
-  const [syncStatus, setSyncStatus] = useState('synced');
   const isAutoLoginAttempted = useRef(false);
-
-  // New States for Imports
-  const [urlImportMode, setUrlImportMode] = useState(false);
-  const [urlInput, setUrlInput] = useState('');
-
-  // Connection Settings State
-  const [forceLongPolling, setForceLongPolling] = useState(() => {
-      const stored = localStorage.getItem('rm_force_polling');
-      return stored === 'true';
-  });
 
   // Full Screen & Resizable Layout State
   const [fullScreenRecipe, setFullScreenRecipe] = useState(null);
   const [splitRatio, setSplitRatio] = useState(50); // percentage for left column
   const isResizingRef = useRef(false);
-
-  // New State for Test API Key
-  const [testApiKey, setTestApiKey] = useState('');
 
   // Pantry UI State
   const [activePantryCategory, setActivePantryCategory] = useState("Meats");
@@ -268,7 +233,7 @@ const App = () => {
   const [editRecipeForm, setEditRecipeForm] = useState({ name: '', ingredients: '', instructions: '' });
 
   // Delete Confirmation State
-  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id: string, name: string, collection: 'pantry'|'recipes' }
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null); 
 
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -282,40 +247,16 @@ const App = () => {
   const [manual, setManual] = useState({ name: '', ings: '', inst: '', source: '' });
   const [rawTextImport, setRawTextImport] = useState('');
   const fileInputRef = useRef(null);
-  const jsonImportRef = useRef(null); // Ref for JSON import
+  const jsonImportRef = useRef(null); 
   const cameraInputRef = useRef(null);
+  const [urlImportMode, setUrlImportMode] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.51");
+    console.log("App Mounted - v2.9.61");
     // Ensure CSS root variables are set correctly on mount
     const root = document.documentElement;
     if (!root.className) root.className = 'dark';
-
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    // Global Error Listener for Ad-Block detection
-    const handleGlobalError = (event) => {
-        if (event.message && event.message.includes('ERR_BLOCKED_BY_CLIENT')) {
-            setIsBlocked(true);
-            setSyncStatus('error');
-            addLog("CRITICAL: Connection blocked by extension!");
-        }
-    };
-    window.addEventListener('error', handleGlobalError);
-
-    // Force network connection on mount
-    if (fb.db) {
-        enableNetwork(fb.db).catch(e => console.warn("Network enable warning:", e));
-    }
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('error', handleGlobalError);
-    };
   }, []);
 
   // Handle Tab Switching
@@ -348,15 +289,6 @@ const App = () => {
     };
   }, [fullScreenRecipe]);
 
-  const addLog = (msg) => {
-    // Safety check for objects
-    const textMsg = typeof msg === 'object' ? JSON.stringify(msg) : String(msg);
-    const time = new Date().toLocaleTimeString();
-    setDebugLogs(prev => [`[${time}] ${textMsg}`, ...prev].slice(0, 30));
-    console.log(`[RecipeMatcher] ${textMsg}`); 
-    if (textMsg.includes('ERR_BLOCKED_BY_CLIENT')) setIsBlocked(true);
-  };
-
   const getSafeUid = (u) => String(u?.uid || 'guest').replace(/\//g, '_');
 
   // Compute Available Ingredients
@@ -365,7 +297,6 @@ const App = () => {
     const availableSet = new Set();
     const dbStatusMap = new Map();
 
-    // 1. Add all items from DB that are 'have'
     items.forEach(i => {
       const lowerName = (i.name || "").toLowerCase();
       const isAvailable = i.status === 'have' || (i.status === undefined && i.available === true);
@@ -373,7 +304,6 @@ const App = () => {
       if (isAvailable) availableSet.add(lowerName);
     });
 
-      // 2. Add Master List defaults (only if not already decided by DB)
       Object.keys(MASTER_INGREDIENTS).forEach(cat => {
         MASTER_INGREDIENTS[cat].forEach(name => {
           const lowerName = name.toLowerCase();
@@ -619,29 +549,6 @@ const App = () => {
     .bg-slate-500 { background-color: #64748b; color: white; }
     .bg-green-600 { background-color: #16a34a; color: white; }
 
-    /* Warning Banner */
-    .warning-banner {
-      background-color: #f59e0b; /* Yellow warning for cache mode */
-      color: black;
-      text-align: center;
-      padding: 8px;
-      font-size: 12px;
-      font-weight: 700;
-      width: 100%;
-      position: sticky;
-      top: 0;
-      z-index: 9999;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      cursor: pointer;
-    }
-    .warning-banner.critical {
-      background-color: #ef4444; /* Red for blocks */
-      color: white;
-    }
-
     /* Full Window Styles */
     .full-window-overlay {
       position: fixed; inset: 0; z-index: 2000;
@@ -735,7 +642,6 @@ const App = () => {
       if (!urlInput || !user) return;
       
       setIsAnalyzing(true);
-      addLog(`Processing URL: ${urlInput}`);
       
       try {
         let response;
@@ -763,7 +669,6 @@ const App = () => {
                 inst: Array.isArray(json.instructions) ? json.instructions.join('\n') : (json.instructions || ""),
                 source: urlInput
              });
-             addLog("URL Import Success");
              setUrlImportMode(false);
              setUrlInput('');
         } else {
@@ -771,7 +676,6 @@ const App = () => {
         }
 
       } catch(err) {
-          addLog(`URL Import Failed: ${err.message}`);
           alert("Could not extract recipe from URL. Try pasting the text instead.");
       } finally {
           setIsAnalyzing(false);
@@ -801,7 +705,6 @@ const App = () => {
             if (!isMounted) return;
             if (usr) {
               setUser(usr);
-              addLog(`Session OK: ${usr.uid.substring(0, 5)}`);
             } else {
               if (!isAutoLoginAttempted.current) {
                 isAutoLoginAttempted.current = true;
@@ -833,41 +736,18 @@ const App = () => {
     const recipesRef = collection(fb.db, 'artifacts', appId, 'users', safeUid, 'recipes');
     const pantryRef = collection(fb.db, 'artifacts', appId, 'users', safeUid, 'pantry');
 
-    addLog(`Syncing ${safeUid.substring(0,5)}...`);
-
     // SNAPSHOT LISTENERS WITH METADATA CHECK
     const unsubR = onSnapshot(recipesRef, (s) => {
       const data = s.docs.map(d => ({ id: d.id, ...d.data() }));
       setRecipes(data);
-      
-      const source = s.metadata.fromCache ? 'Cache' : 'Server';
-      setIsCacheMode(s.metadata.fromCache);
-      addLog(`Fetched ${data.length} recipes [${source}]`);
-
-      // UPDATE SYNC STATUS
-      if (s.metadata.hasPendingWrites) {
-          setSyncStatus('pending');
-          setHasPending(true);
-      } else if (s.metadata.fromCache) {
-          setSyncStatus('offline'); // Technically offline/cache, possibly blocked
-          setHasPending(false);
-      } else {
-          setSyncStatus('synced');
-          setHasPending(false);
-      }
-
     }, (err) => { 
-        addLog(`R-Error: ${err.code}`); 
         setRecipes([]); 
-        setSyncStatus('error');
     });
 
     const unsubP = onSnapshot(pantryRef, (s) => {
       const data = s.docs.map(d => ({ id: d.id, ...d.data() }));
       setPantry(data);
-      const source = s.metadata.fromCache ? 'Cache' : 'Server';
-      addLog(`Fetched ${data.length} items [${source}]`);
-    }, (err) => { addLog(`P-Error: ${err.code}`); setPantry([]); });
+    }, (err) => { setPantry([]); });
 
     return () => { unsubR(); unsubP(); };
   }, [user?.uid]);
@@ -899,8 +779,7 @@ const App = () => {
             available: targetStatus === 'have'
           });
         }
-        addLog(`Updated: ${name}`);
-      } catch (e) { addLog(`DB Error: ${e.message}`); }
+      } catch (e) { console.error(e); }
     };
 
     const handlePantryAdd = async (e) => {
@@ -941,10 +820,8 @@ const App = () => {
                      status: 'have',
                      available: true
         });
-        addLog(`Added: ${val}`);
       } catch (e) {
-        // If error, maybe restore input? Or just log.
-        addLog(`Error: ${e.message}`);
+        console.error(e);
       }
     };
 
@@ -962,9 +839,8 @@ const App = () => {
 
       try {
         await deleteDoc(doc(fb.db, 'artifacts', appId, 'users', user.uid, colName, id));
-        addLog("Item deleted.");
       } catch (e) {
-        addLog(`Delete Error: ${e.message}`);
+        console.error(e);
       }
     };
 
@@ -990,8 +866,7 @@ const App = () => {
             available: nextStatus === 'have'
           });
         }
-        addLog(`${name} -> ${nextStatus}`);
-      } catch (e) { addLog(`Move Error: ${e.message}`); }
+      } catch (e) { console.error(e); }
     };
 
     const renderColumn = (statusKey, title) => {
@@ -1055,26 +930,15 @@ const App = () => {
     const saveEditedRecipe = async () => {
       if (!editingRecipeId || !user) return;
       try {
-        // Race updateDoc against a 5s timeout
-        const updatePromise = updateDoc(doc(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes', editingRecipeId), {
+        await updateDoc(doc(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes', editingRecipeId), {
           name: editRecipeForm.name,
           ingredients: editRecipeForm.ingredients,
           instructions: editRecipeForm.instructions
         });
-
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Update timeout")), 5000));
-
-        await Promise.race([updatePromise, timeoutPromise]);
         
         setEditingRecipeId(null);
-        addLog("Recipe updated.");
       } catch (e) {
-        if (e.message === "Update timeout") {
-           addLog("Update queued (offline/timeout).");
-           setEditingRecipeId(null); // Close on timeout assumption
-        } else {
-           addLog(`Update failed: ${e.message}`);
-        }
+          console.error(e);
       }
     };
 
@@ -1083,11 +947,9 @@ const App = () => {
     // 1. Text Parsing (Local)
     const handleLocalParse = () => {
       if (!rawTextImport.trim()) return;
-      addLog("Parsing text locally...");
       const lines = rawTextImport.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
       if (lines.length < 2) {
-        addLog("Not enough text found.");
         return;
       }
 
@@ -1118,14 +980,9 @@ const App = () => {
         source: "Manual Text Import"
       });
       setRawTextImport('');
-      addLog("Text parsed successfully.");
     };
     // 2. Image Analysis (Gemini Vision via Vercel Backend)
     const getRecipeFromImage = async (base64Data) => {
-      // 1. Log Start
-      addLog("Sending image to secure backend...");
-      addLog(`Image Size: ${(base64Data.length * 0.75 / 1024).toFixed(2)} KB`);
-
       const prompt = `Extract the recipe from this image. Return valid JSON with these keys: "name" (string), "ingredients" (single string with newlines), "instructions" (single string with newlines). If no recipe is found, return null.`;
       
       const controller = new AbortController();
@@ -1135,7 +992,6 @@ const App = () => {
         let response;
         if (testApiKey) {
           // DIRECT CALL (For Preview Testing)
-          addLog("Using TEST KEY (Client-Side)...");
           response = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${testApiKey}`,
             {
@@ -1169,44 +1025,14 @@ const App = () => {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-          // Enhanced Error Logging
-          const status = response.status;
-          let details = response.statusText;
-          
-          try {
-            // Try reading JSON error first (clone to not consume body)
-            const errorJson = await response.clone().json();
-            if (errorJson.error) details = typeof errorJson.error === 'object' ? JSON.stringify(errorJson.error) : errorJson.error;
-          } catch (e) {
-            // Fallback to text (e.g. for 404/500 HTML pages)
-            try {
-              const text = await response.text();
-              // Remove HTML tags for cleaner logs if it's a default 404 page
-              const cleanText = text.replace(/<[^>]*>?/gm, '').substring(0, 100);
-              details = cleanText.length > 0 ? cleanText : details;
-            } catch (e2) {}
-          }
-
-          addLog(`Backend Error [${status}]: ${details}`);
-          if (!testApiKey && (status === 404 || status === 405)) {
-            // Trigger UI Alert for Missing Backend
-            alert("Backend Not Found! \n\nSince you are in Preview Mode, you must enter a 'Test API Key' below to make this work.");
-          }
           return null;
         }
 
         const data = await response.json();
         
-        // 2. Log Raw Response
-        if (data?.error) {
-          addLog(`API Error: ${data.error.message}`);
-          return null;
-        }
-
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         
         if (text) {
-          addLog("Received text from AI. Parsing...");
           try {
             const json = parseAndSanitizeAIJSON(text);
             return {
@@ -1215,21 +1041,13 @@ const App = () => {
               instructions: Array.isArray(json.instructions) ? json.instructions.join('\n') : (typeof json.instructions === 'string' ? json.instructions : "")
             };
           } catch (e) {
-            addLog("JSON Parse Error: " + e.message);
-            // addLog("Raw Text: " + text.substring(0, 100) + "...");
             return null;
           }
         }
-        addLog("No text returned from AI.");
         return null;
 
       } catch (e) {
         clearTimeout(timeoutId);
-        if (e.name === 'AbortError') {
-             addLog("Request timed out (30s).");
-        } else {
-             addLog("Network/Server Error: " + e.message);
-        }
         return null;
       }
     };
@@ -1244,11 +1062,6 @@ const App = () => {
       if (files.length === 1) {
         // Single File - Load into Editor (Existing Logic)
         const reader = new FileReader();
-        // Add error handling to single file reader
-        reader.onerror = () => {
-             addLog("Error reading file");
-             setIsAnalyzing(false);
-        };
         reader.onloadend = async () => {
           setIsAnalyzing(true);
           try {
@@ -1260,10 +1073,9 @@ const App = () => {
                 inst: data.instructions,
                 source: "AI Photo Scan"
               });
-              addLog("Photo analysis complete!");
             }
           } catch(err) {
-            addLog("Error analyzing photo.");
+            console.error(err);
           } finally {
             setIsAnalyzing(false);
           }
@@ -1279,7 +1091,6 @@ const App = () => {
 
         for (let i = 0; i < filesToProcess.length; i++) {
           setBatchProgress({ current: i + 1, total: filesToProcess.length });
-          addLog(`Processing file ${i + 1} of ${filesToProcess.length}...`);
           try {
             const base64 = await new Promise((resolve, reject) => {
               const reader = new FileReader();
@@ -1294,39 +1105,25 @@ const App = () => {
             const recipeData = await getRecipeFromImage(base64);
             
             if (recipeData) {
-               addLog(`AI processed. Saving ${recipeData.name}...`); // Debug log
-
-               // Catch permission errors explicitly during save
                try {
-                  // TIMEOUT WRAPPER
-                  const savePromise = addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
+                  await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
                     name: recipeData.name,
                     ingredients: recipeData.ingredients,
                     instructions: recipeData.instructions,
                     source: "AI Batch Scan",
                     createdAt: Date.now()
                   });
-                  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Save timeout")), 5000));
-                  
-                  await Promise.race([savePromise, timeoutPromise]);
-                  addLog(`Success: ${recipeData.name}`);
                } catch (saveError) {
-                  addLog(`SAVE ERROR: ${saveError.message}`);
-                  if (saveError.code === 'permission-denied') {
-                      alert("PERMISSION DENIED: Firebase rules blocking write.");
-                  }
+                  console.error(saveError);
                }
 
-            } else {
-              addLog(`Failed: File ${i + 1} returned no data.`);
             }
           } catch (e) {
-            addLog(`Batch Error (File ${i+1}): ${e.message}`);
+            console.error(e);
           }
         }
         setIsAnalyzing(false);
         setBatchProgress({ current: 0, total: 0 });
-        addLog("Batch import complete.");
         setTimeout(() => setActiveTab('recipes'), 1000); // Redirect to recipes after 1s
       }
     };
@@ -1347,33 +1144,13 @@ const App = () => {
       };
 
       try {
-        addLog(`Saving to users/${user.uid}/recipes`);
-        
-        // ADD TIMEOUT TO MANUAL SAVE
-        const savePromise = addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), recipePayload);
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Save timeout - Connection poor or blocked")), 5000));
-
-        await Promise.race([savePromise, timeoutPromise]);
+        await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), recipePayload);
 
         // Reset form ONLY on success
         resetManualForm();
-        setScrapeUrl('');
         setActiveTab('recipes');
-        addLog("Recipe Saved.");
       } catch (e) {
-        addLog(`Save Error: ${e.message}`);
-        if (e.code === 'permission-denied') {
-            alert("PERMISSION DENIED: Check Firebase Console Rules.");
-        } else if (e.message.includes("timeout")) {
-            if (isCacheMode || syncStatus === 'offline') {
-                addLog(`Saved to Device (Sync Pending)`);
-                // Assume success locally
-                resetManualForm();
-                setActiveTab('recipes');
-            } else {
-                alert("Save timed out! Check your network connection or ad-blocker.");
-            }
-        }
+        console.error(e);
       }
       setIsImporting(false);
     };
@@ -1401,52 +1178,7 @@ const App = () => {
     };
     const handleSignOut = async () => {
       try { if (!fb.isDummyConfig) await signOut(fb.auth); window.location.reload(); }
-      catch (e) { addLog(e.message); }
-    };
-
-    // Manual Reconnect for Mobile Debugging
-    const handleReconnect = async () => {
-      try {
-        await disableNetwork(fb.db);
-        await new Promise(r => setTimeout(r, 500));
-        await enableNetwork(fb.db);
-        addLog("Reconnected to database.");
-        
-        // Force a one-time fetch to test connection
-        if (user) {
-            addLog("Testing fetch...");
-            const recipesRef = collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes');
-            const snapshot = await getDocs(recipesRef);
-            addLog(`Test fetch success: ${snapshot.size} recipes found.`);
-        }
-      } catch (e) {
-        addLog("Reconnect failed: " + e.message);
-      }
-    };
-
-    // Manual Long Polling Toggle
-    const toggleLongPolling = () => {
-        const newValue = !forceLongPolling;
-        setForceLongPolling(newValue);
-        localStorage.setItem('rm_force_polling', String(newValue));
-        window.location.reload();
-    };
-
-    // Manual Reset Data
-    const handleResetData = async () => {
-      if (!confirm("This will clear local cache and reload. Your saved recipes are safe in the cloud. Continue?")) return;
-      try {
-        addLog("Terminating DB connection...");
-        await terminate(fb.db);
-        addLog("Clearing persistence...");
-        await clearIndexedDbPersistence(fb.db);
-        addLog("Done. Reloading...");
-        window.location.reload();
-      } catch (e) {
-        addLog("Reset failed: " + e.message);
-        // Force reload anyway if stuck
-        setTimeout(() => window.location.reload(), 2000);
-      }
+      catch (e) { console.error(e); }
     };
     
     // EXPORT DATA (Backup)
@@ -1463,7 +1195,20 @@ const App = () => {
         a.download = `recipes_backup_${new Date().toISOString().slice(0,10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        addLog("Backup downloaded.");
+    };
+
+    // Copy to Clipboard
+    const handleCopyToClipboard = () => {
+        if (!recipes || recipes.length === 0) {
+            alert("No recipes to copy.");
+            return;
+        }
+        const dataStr = JSON.stringify(recipes, null, 2);
+        navigator.clipboard.writeText(dataStr).then(() => {
+            alert("Recipes copied to clipboard!");
+        }).catch(err => {
+            console.error("Clipboard failed: " + err);
+        });
     };
 
     // IMPORT DATA (Restore)
@@ -1477,7 +1222,6 @@ const App = () => {
                 const importedRecipes = JSON.parse(event.target.result);
                 if (!Array.isArray(importedRecipes)) throw new Error("Invalid format");
                 
-                addLog(`Restoring ${importedRecipes.length} recipes...`);
                 let count = 0;
                 for (const recipe of importedRecipes) {
                     // Remove ID to let Firestore generate new ones
@@ -1488,85 +1232,14 @@ const App = () => {
                     });
                     count++;
                 }
-                addLog(`Restored ${count} recipes.`);
                 setTimeout(() => setActiveTab('recipes'), 1000);
             } catch (err) {
-                addLog("Import failed: " + err.message);
+                console.error("Import failed: " + err.message);
             }
         };
         reader.readAsText(file);
         // Reset input
         e.target.value = '';
-    };
-    
-    // Admin Inspector: List All Collections
-    const handleInspectDB = async () => {
-        if (!user) return;
-        addLog("--- DEBUG INSPECTION START ---");
-        
-        // Check App ID source
-        const appIdSource = typeof __app_id !== 'undefined' ? 'Global Variable' : 'Default String';
-        addLog(`App ID: ${appId} (${appIdSource})`);
-        
-        // Check Paths
-        const recipePath = `artifacts/${appId}/users/${user.uid}/recipes`;
-        const pantryPath = `artifacts/${appId}/users/${user.uid}/pantry`;
-        
-        addLog(`Checking Recipes Path: ${recipePath}`);
-        try {
-            const rSnap = await getDocs(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'));
-            addLog(`> Recipes Found: ${rSnap.size} [${rSnap.metadata.fromCache ? 'Cache' : 'Server'}]`);
-            rSnap.forEach(d => console.log("Recipe:", d.id, d.data()));
-        } catch(e) {
-            addLog(`> Recipe Read Error: ${e.message}`);
-        }
-
-        addLog(`Checking Pantry Path: ${pantryPath}`);
-        try {
-            const pSnap = await getDocs(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'pantry'));
-            addLog(`> Pantry Items Found: ${pSnap.size} [${pSnap.metadata.fromCache ? 'Cache' : 'Server'}]`);
-        } catch(e) {
-            addLog(`> Pantry Read Error: ${e.message}`);
-        }
-        
-        addLog("--- DEBUG INSPECTION END ---");
-    };
-
-    // TEST WRITE FUNCTION
-    const handleWriteTest = async () => {
-        if (!user) return;
-        addLog("Attempting test write...");
-        try {
-            await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'debug_tests'), {
-                timestamp: Date.now(),
-                test: true
-            });
-            addLog("Write Success! Database is writable.");
-        } catch(e) {
-            addLog(`Write Failed: ${e.code} - ${e.message}`);
-        }
-    };
-    
-    // Test DNS/Network
-    const handleTestDNS = async () => {
-      addLog("Testing Internet Connectivity...");
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        // Using a reliable Google endpoint that allows CORS
-        const response = await fetch('https://www.gstatic.com/generate_204', { 
-            method: 'GET',
-            mode: 'no-cors',
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        addLog("DNS/Internet Test: SUCCESS (Reachable)");
-      } catch (e) {
-        addLog(`DNS/Internet Test: FAILED (${e.message})`);
-        if (e.name === 'AbortError') {
-            addLog("Cause: Request Timeout. Check Firewall/DNS.");
-        }
-      }
     };
 
     if (isLoading) return <div className="app-container dark" style={{justifyContent:'center', display:'flex', alignItems:'center'}}><Loader2 className="animate-spin text-orange-500 mx-auto mb-4" size={56}/></div>;
@@ -1574,59 +1247,6 @@ const App = () => {
     return (
       <div className={`app-container ${theme}`}>
       <div className="fixed-background"></div>
-      
-      {/* Network Block Warning */}
-      {isBlocked && (
-        <div className="warning-banner critical" onClick={() => setShowBlockInfo(true)}>
-          <ShieldAlert size={14} className="inline mr-2" />
-          <span>Connection Blocked! Click here for fix instructions.</span>
-        </div>
-      )}
-      
-      {/* Cache Mode Warning (Offline but not blocked) */}
-      {!isBlocked && isCacheMode && (
-        <div className="warning-banner">
-          <CloudOff size={14} className="inline mr-2" />
-           ⚠️ Using Local Data (Not Syncing)
-        </div>
-      )}
-      
-      {/* Help Modal for Blocked Connection */}
-      {showBlockInfo && (
-        <div className="modal-overlay" onClick={() => setShowBlockInfo(false)}>
-            <div className="modal-card max-w-lg" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-red-500 flex items-center gap-2"><ShieldAlert/> Connection Blocked</h2>
-                    <button onClick={() => setShowBlockInfo(false)}><X size={20}/></button>
-                </div>
-                <div className="text-sm space-y-4">
-                    <p className="font-bold">Your browser is blocking the database connection.</p>
-                    <p>To fix this and sync your recipes:</p>
-                    
-                    <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg border border-border">
-                        <strong className="block mb-1 text-primary">If using Vivaldi:</strong>
-                        1. Click the <ShieldAlert size={12} className="inline"/> <b>Shield Icon</b> in the address bar (left side).<br/>
-                        2. Select <b>"No Blocking"</b> for this site.<br/>
-                        3. Reload the page.
-                    </div>
-
-                    <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg border border-border">
-                        <strong className="block mb-1 text-primary">If using Firefox:</strong>
-                        1. Click the <ShieldAlert size={12} className="inline"/> <b>Shield Icon</b> in the address bar (left side).<br/>
-                        2. Toggle the switch to <b>OFF</b> ("Enhanced Tracking Protection").<br/>
-                        3. Reload the page.
-                    </div>
-                    
-                    <div className="text-xs text-muted mt-4">
-                        <i>Note: This happens because privacy browsers sometimes mistake the Google Database connection for a "tracker".</i>
-                    </div>
-                </div>
-            </div>
-        </div>
-      )}
-
-      {/* Background Image */}
-      <img src="/mechef.png" alt="" className="bg-bottom-right" />
 
       {/* Full Window Recipe View */}
       {fullScreenRecipe && (
@@ -1773,7 +1393,7 @@ const App = () => {
       {/* Removed title text, kept icon */}
       <div className="logo"><ChefHat size={28} strokeWidth={2.5}/></div>
       <nav className="tabs">
-      {['recipes','pantry','import', 'logs'].map(id => <button key={id} onClick={() => handleTabChange(id)} className={`tab-btn ${activeTab === id ? 'active' : ''}`}>{id}</button>)}
+      {['recipes','pantry','data'].map(id => <button key={id} onClick={() => handleTabChange(id)} className={`tab-btn ${activeTab === id ? 'active' : ''}`}>{id}</button>)}
       </nav>
       <div className="header-actions flex items-center gap-2">
       <div className="auth-badge" onClick={() => (!user || user.isAnonymous) ? setIsAuthOpen(true) : handleSignOut()}>
@@ -1784,13 +1404,6 @@ const App = () => {
       <span className="text-xs font-bold">
       {(!user || user.isAnonymous) ? 'Sign In' : (user.displayName || 'Member')}
       </span>
-      {/* Sync Status Indicator */}
-        <div className="flex items-center gap-2 bg-input-bg px-3 py-1 rounded-full border border-border">
-          {syncStatus === 'synced' && <><Cloud size={16} className="text-green-600"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Synced</span></>}
-          {syncStatus === 'pending' && <><RefreshCw size={16} className="animate-spin text-yellow-500"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Saving...</span></>}
-          {syncStatus === 'offline' && <><CloudOff size={16} className="text-gray-500"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Offline</span></>}
-          {syncStatus === 'error' && <><ShieldAlert size={16} className="text-red-600"/><span className="text-xs font-bold text-gray-900 dark:text-gray-100 uppercase">Blocked</span></>}
-        </div>
       </div>
       <button className="color-toggle" onClick={() => setColorTheme(t => t === 'orange' ? 'blue' : 'orange')}></button>
       <button className="theme-toggle" onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}>
@@ -1836,7 +1449,7 @@ const App = () => {
           {/* New Title Block */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1>
-            <p className="text-xs text-muted font-mono">v2.9.52</p>
+            <p className="text-xs text-muted font-mono">v2.9.61</p>
           </div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
@@ -1913,41 +1526,58 @@ const App = () => {
           </div>
       )}
 
-      {activeTab === 'import' && (
-        <div className="space-y-4">
+      {/* NEW: Data Management Tab (Formerly Import) */}
+      {activeTab === 'data' && (
+        <div className="space-y-6">
         
-        {/* NEW: Import Options Grid */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="import-option" onClick={() => fileInputRef.current?.click()}>
-            {/* Added "multiple" attribute here */}
-            <input type="file" ref={fileInputRef} className="hidden-file-input" accept="image/*" multiple onChange={handleImageSelect} />
-            {isAnalyzing ? <Loader2 className="animate-spin mx-auto mb-2 text-primary" size={24}/> : <Layers className="mx-auto mb-2 text-primary" size={24}/>}
-            <div className="text-sm font-bold">Scan Photos</div>
-            <div className="text-[10px] text-muted">
-              {isAnalyzing && batchProgress.total > 0 ? `Processing ${batchProgress.current}/${batchProgress.total}` : "Batch Import Support"}
+        {/* Export Section */}
+        <div className="card">
+            <div className="font-black text-[10px] uppercase mb-4 text-primary flex items-center gap-2"><Download size={14}/> Export Data</div>
+            <div className="grid grid-cols-2 gap-4">
+                <button onClick={handleExportData} className="import-option flex flex-col items-center justify-center p-4">
+                    <Download className="mb-2 text-green-500" size={24}/>
+                    <span className="text-sm font-bold">Download JSON</span>
+                    <span className="text-[10px] text-muted">Save to file</span>
+                </button>
+                <button onClick={handleCopyToClipboard} className="import-option flex flex-col items-center justify-center p-4">
+                    <Copy className="mb-2 text-blue-500" size={24}/>
+                    <span className="text-sm font-bold">Copy to Clipboard</span>
+                    <span className="text-[10px] text-muted">Paste elsewhere</span>
+                </button>
             </div>
-          </div>
+        </div>
 
-          <div className="import-option" onClick={() => setUrlImportMode(true)}>
-            <LinkIcon className="mx-auto mb-2 text-muted" size={24}/>
-            <div className="text-sm font-bold text-muted">Import URL</div>
-            <div className="text-[10px] text-muted">Web Page</div>
-          </div>
-          
-           {/* New: Import from Camera Option */}
-           <div className="import-option" onClick={() => cameraInputRef.current?.click()}>
-             <input type="file" ref={cameraInputRef} className="hidden-file-input" accept="image/*" capture="environment" onChange={handleImageSelect} />
-             <Camera className="mx-auto mb-2 text-primary" size={24}/>
-             <div className="text-sm font-bold">Take Photo</div>
-             <div className="text-[10px] text-muted">Use Camera</div>
-           </div>
+        {/* Import Section */}
+        <div className="card">
+            <div className="font-black text-[10px] uppercase mb-4 text-primary flex items-center gap-2"><Upload size={14}/> Import Data</div>
+            <div className="grid grid-cols-2 gap-4">
+            <div className="import-option" onClick={() => jsonImportRef.current?.click()}>
+                <input type="file" ref={jsonImportRef} className="hidden-file-input" accept=".json" onChange={handleImportJSON} />
+                <FileJson className="mx-auto mb-2 text-purple-500" size={24}/>
+                <div className="text-sm font-bold">Restore JSON</div>
+                <div className="text-[10px] text-muted">Load backup file</div>
+            </div>
+            
+            <div className="import-option" onClick={() => fileInputRef.current?.click()}>
+                <input type="file" ref={fileInputRef} className="hidden-file-input" accept="image/*" multiple onChange={handleImageSelect} />
+                {isAnalyzing ? <Loader2 className="animate-spin mx-auto mb-2 text-primary" size={24}/> : <Layers className="mx-auto mb-2 text-primary" size={24}/>}
+                <div className="text-sm font-bold">Scan Photos</div>
+                <div className="text-[10px] text-muted">AI Recipe Scan</div>
+            </div>
 
-          <div className="import-option" onClick={() => jsonImportRef.current?.click()}>
-             <input type="file" ref={jsonImportRef} className="hidden-file-input" accept=".json" onChange={handleImportJSON} />
-             <Upload className="mx-auto mb-2 text-primary" size={24}/>
-             <div className="text-sm font-bold">Restore JSON</div>
-             <div className="text-[10px] text-muted">Load backup file</div>
-          </div>
+            <div className="import-option" onClick={() => setUrlImportMode(true)}>
+                <LinkIcon className="mx-auto mb-2 text-muted" size={24}/>
+                <div className="text-sm font-bold text-muted">Import URL</div>
+                <div className="text-[10px] text-muted">Web Page</div>
+            </div>
+            
+            <div className="import-option" onClick={() => cameraInputRef.current?.click()}>
+                <input type="file" ref={cameraInputRef} className="hidden-file-input" accept="image/*" capture="environment" onChange={handleImageSelect} />
+                <Camera className="mx-auto mb-2 text-primary" size={24}/>
+                <div className="text-sm font-bold">Take Photo</div>
+                <div className="text-[10px] text-muted">Use Camera</div>
+            </div>
+            </div>
         </div>
 
         {/* URL Import Modal/Input Area */}
@@ -2004,63 +1634,6 @@ const App = () => {
         />
         <button className="btn-action w-full btn-sm" onClick={manualSaveNewRecipe} disabled={isImporting || !manual.name}><SaveIcon size={20}/> Save</button>
         </div>
-        </div>
-        </div>
-      )}
-
-      {activeTab === 'logs' && (
-        <div className="space-y-4">
-        <div className="card text-[11px] font-mono">
-        <div className="flex justify-between items-center mb-4"><div className="font-black text-xs text-primary uppercase">System Status</div>
-        </div>
-        <div className="flex gap-2 flex-wrap mb-4 border-b border-border pb-4">
-            <button onClick={handleExportData} 
-              title="Download Backup (JSON)" 
-              className={`p-2 rounded flex items-center gap-2 ${recipes && recipes.length > 0 && isCacheMode ? 'bg-green-100 dark:bg-green-900 animate-pulse' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
-              <Download size={14} className={recipes && recipes.length > 0 && isCacheMode ? "text-green-600 dark:text-green-400" : "text-green-500"}/>
-              <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Backup</span>
-            </button>
-            <button onClick={toggleLongPolling} className="text-xs px-2 py-1 bg-muted/20 rounded hover:bg-muted/40 transition-colors font-bold text-gray-900 dark:text-gray-100" title="Force Long Polling for Mobile">
-                {forceLongPolling ? "LongPolling: ON" : "LongPolling: OFF"}
-            </button>
-            <button onClick={handleReconnect} title="Force Reconnect/Ping" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
-                <CloudLightning size={14} className="text-primary"/>
-                <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Reconnect</span>
-            </button>
-            <button onClick={handleInspectDB} title="Inspect Database" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
-                <Database size={14}/>
-                <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Inspect</span>
-            </button>
-            <button onClick={handleWriteTest} title="Test Write Permissions" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
-                <PenTool size={14}/>
-                <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Test Write</span>
-            </button>
-            <button onClick={handleTestDNS} title="Test Internet/DNS" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
-                <Globe size={14}/>
-                <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Test DNS</span>
-            </button>
-            <button onClick={handleResetData} title="Clear Cache & Reset" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-red-500 flex items-center gap-2">
-                <Trash2 size={14}/>
-                <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Reset App</span>
-            </button>
-             <button onClick={() => window.location.reload()} title="Reload Page" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex items-center gap-2">
-                <RefreshCw size={14}/>
-                <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Reload</span>
-            </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 mb-4 border-b border-border pb-4">
-          <div><span className="text-muted">App ID:</span> {appId}</div>
-          <div><span className="text-muted">User ID:</span> <span className="text-[10px] break-all">{user ? user.uid : 'None'}</span></div>
-          <div className="col-span-2"><span className="text-muted">Email:</span> {user ? user.email : 'None'}</div>
-          <div><span className="text-muted">Recipes:</span> {recipes ? recipes.length : 0}</div>
-          <div><span className="text-muted">Browser Net:</span> {isOnline ? 'Online' : 'Offline'}</div>
-          <div><span className="text-muted">Pending Uploads:</span> {hasPending ? <span className="text-yellow-500 font-bold">YES</span> : 'No'}</div>
-          <div className="col-span-2 text-[10px] text-muted truncate">UA: {typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown'}</div>
-        </div>
-
-        <div className="font-black text-xs text-primary uppercase mb-2">Event Log</div>
-        {debugLogs.map((log, i) => <div key={i} className="py-1 border-b border-border/20">{log}</div>)}
         </div>
         </div>
       )}
