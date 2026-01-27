@@ -56,24 +56,11 @@ const initializeFirebase = () => {
 
     if (!getApps().length) {
       app = initializeApp(firebaseConfig);
-      
-      // SAFE INITIALIZATION: Check for window/localStorage before accessing
-      let useLongPolling = false;
-      if (typeof window !== 'undefined' && window.localStorage) {
-          const storedPolling = localStorage.getItem('rm_force_polling');
-          const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-          useLongPolling = storedPolling === 'true' || (isMobileUA && storedPolling !== 'false');
-      }
+      db = getFirestore(app);
 
-      if (useLongPolling) {
-         db = initializeFirestore(app, { experimentalForceLongPolling: true });
-         console.log("[Firebase] Long Polling Enabled");
-      } else {
-         db = getFirestore(app);
-      }
-
+      // Simple persistence enable
       enableIndexedDbPersistence(db).catch((err) => {
-          console.warn("Persistence failed (expected in some environments):", err.code);
+          console.warn("Persistence failed:", err.code);
       });
     } else {
       app = getApp();
@@ -219,7 +206,7 @@ const App = () => {
   const [recipes, setRecipes] = useState(null);
   const [pantry, setPantry] = useState(null);
   
-  // Theme State with Safe Initializers
+  // Theme State
   const [theme, setTheme] = useState(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('rm_theme_v143') || 'dark';
     return 'dark';
@@ -253,14 +240,14 @@ const App = () => {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [authForm, setAuthForm] = useState({ email: '', password: '', name: '' });
-  const [authError, setAuthError] = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
 
   const [isImporting, setIsImporting] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false); 
-  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [manual, setManual] = useState({ name: '', ings: '', inst: '', source: '' });
   const [rawTextImport, setRawTextImport] = useState('');
+  
   const fileInputRef = useRef(null);
   const jsonImportRef = useRef(null); 
   const cameraInputRef = useRef(null);
@@ -268,7 +255,7 @@ const App = () => {
   const [urlInput, setUrlInput] = useState('');
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.67");
+    console.log("App Mounted - v2.9.69");
     const root = document.documentElement;
     // Removed direct DOM manipulation that conflicts with CSS vars
   }, []);
@@ -305,7 +292,7 @@ const App = () => {
 
   const getSafeUid = (u) => String(u?.uid || 'guest').replace(/\//g, '_');
 
-  // --- ACTIONS & HANDLERS (Defined before use) ---
+  // --- ACTIONS & HANDLERS ---
 
   const cycleStatus = async (name, currentStatus) => {
       if (!user) return;
@@ -851,16 +838,261 @@ const App = () => {
         e.target.value = '';
     };
 
-    useEffect(() => {
-       if (theme) {
-         localStorage.setItem('rm_theme_v143', theme);
-       }
-       if (colorTheme) {
-         localStorage.setItem('rm_color_theme', colorTheme);
-       }
-    }, [theme, colorTheme]);
+    const handleExportData = () => {
+        if (!recipes || recipes.length === 0) {
+            alert("No recipes to export.");
+            return;
+        }
+        const dataStr = JSON.stringify(recipes, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `recipes_backup_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
-    // Force load content after small delay if firebase hangs
+    const handleCopyToClipboard = () => {
+        if (!recipes || recipes.length === 0) {
+            alert("No recipes to copy.");
+            return;
+        }
+        const dataStr = JSON.stringify(recipes, null, 2);
+        navigator.clipboard.writeText(dataStr).then(() => {
+            alert("Recipes copied to clipboard!");
+        }).catch(err => {
+            console.error("Clipboard failed: " + err);
+        });
+    };
+
+    const handleGoogleLogin = async () => {
+      setIsAuthLoading(true);
+      if (fb.isDummyConfig) { setIsAuthLoading(false); return; }
+      try { await signInWithPopup(fb.auth, fb.googleProvider); setIsAuthOpen(false); }
+      catch (e) { setAuthError(e.message); } finally { setIsAuthLoading(false); }
+    };
+    const handleEmailAuth = async (e) => {
+      e.preventDefault();
+      setIsAuthLoading(true);
+      if (fb.isDummyConfig) { setIsAuthLoading(false); return; }
+      try {
+        if (authMode === 'signup') {
+          const res = await createUserWithEmailAndPassword(fb.auth, authForm.email, authForm.password);
+          await updateProfile(res.user, { displayName: authForm.name });
+        } else {
+          await signInWithEmailAndPassword(fb.auth, authForm.email, authForm.password);
+        }
+        setIsAuthOpen(false);
+      } catch (e) { setAuthError(e.message); } finally { setIsAuthLoading(false); }
+    };
+    const handleSignOut = async () => {
+      try { if (!fb.isDummyConfig) await signOut(fb.auth); window.location.reload(); }
+      catch (e) { console.error(e); }
+    };
+
+    const handleLocalParse = () => {
+      if (!rawTextImport.trim()) return;
+      const lines = rawTextImport.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length < 2) return;
+      const title = lines[0];
+      const ingredients = [];
+      const instructions = [];
+      let isInst = false;
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.match(/(instruction|step|method|direction)/i)) {
+          isInst = true;
+          continue;
+        }
+        if (line.match(/(ingredient|items|need)/i)) {
+          isInst = false;
+          continue;
+        }
+        if (isInst) instructions.push(line);
+        else ingredients.push(line);
+      }
+
+      setManual({
+        name: title,
+        ings: ingredients.join('\n'),
+        inst: instructions.join('\n'),
+        source: "Manual Text Import"
+      });
+      setRawTextImport('');
+    };
+
+    const getRecipeFromImage = async (base64Data) => {
+      const prompt = `Extract the recipe from this image. Return valid JSON with these keys: "name" (string), "ingredients" (single string with newlines), "instructions" (single string with newlines). If no recipe is found, return null.`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); 
+
+      try {
+        let response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: prompt,
+              base64Data: base64Data
+            }),
+            signal: controller.signal
+          });
+        
+        clearTimeout(timeoutId);
+        if (!response.ok) return null;
+        const data = await response.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (text) {
+          try {
+            const json = parseAndSanitizeAIJSON(text);
+            return {
+              name: typeof json.name === 'string' ? json.name : "Scanned Recipe",
+              ingredients: Array.isArray(json.ingredients) ? json.ingredients.join('\n') : (typeof json.ingredients === 'string' ? json.ingredients : ""),
+              instructions: Array.isArray(json.instructions) ? json.instructions.join('\n') : (typeof json.instructions === 'string' ? json.instructions : "")
+            };
+          } catch (e) {
+            return null;
+          }
+        }
+        return null;
+
+      } catch (e) {
+        clearTimeout(timeoutId);
+        return null;
+      }
+    };
+
+    const handleImageSelect = async (e) => {
+      const files = Array.from(e.target.files);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (!files.length) return;
+
+      if (files.length === 1) {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          setIsAnalyzing(true);
+          try {
+            const data = await getRecipeFromImage(reader.result.split(',')[1]);
+            if (data) {
+              setManual({
+                name: data.name,
+                ings: data.ingredients,
+                inst: data.instructions,
+                source: "AI Photo Scan"
+              });
+            }
+          } catch(err) {
+            console.error(err);
+          } finally {
+            setIsAnalyzing(false);
+          }
+        };
+        reader.readAsDataURL(files[0]);
+      } else {
+        setBatchProgress({ current: 0, total: files.length });
+        setIsAnalyzing(true);
+        const filesToProcess = [...files];
+
+        for (let i = 0; i < filesToProcess.length; i++) {
+          setBatchProgress({ current: i + 1, total: filesToProcess.length });
+          try {
+            const base64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result.split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(filesToProcess[i]);
+            });
+            if(i > 0) await new Promise(r => setTimeout(r, 1000));
+            const recipeData = await getRecipeFromImage(base64);
+            if (recipeData) {
+               try {
+                  await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
+                    name: recipeData.name,
+                    ingredients: recipeData.ingredients,
+                    instructions: recipeData.instructions,
+                    source: "AI Batch Scan",
+                    createdAt: Date.now()
+                  });
+               } catch (saveError) { console.error(saveError); }
+            }
+          } catch (e) { console.error(e); }
+        }
+        setIsAnalyzing(false);
+        setBatchProgress({ current: 0, total: 0 });
+        setTimeout(() => setActiveTab('recipes'), 1000); 
+      }
+    };
+
+    const manualSaveNewRecipe = async () => {
+      if (!manual.name || !user) return;
+      setIsImporting(true);
+      const recipePayload = {
+        name: manual.name,
+        ingredients: manual.ings,
+        instructions: manual.inst,
+        source: manual.source,
+        createdAt: Date.now()
+      };
+
+      try {
+        await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), recipePayload);
+        setManual({ name: '', ings: '', inst: '', source: '' });
+        setUrlInput('');
+        setActiveTab('recipes');
+      } catch (e) {
+        console.error(e);
+      }
+      setIsImporting(false);
+    };
+
+    // Handle URL Import Submission
+    const handleUrlSubmit = async (e) => {
+      e.preventDefault();
+      if (!urlInput || !user) return;
+      
+      setIsAnalyzing(true);
+      
+      try {
+        let response;
+        const prompt = `Extract the recipe from this URL: ${urlInput}. Return valid JSON with keys: "name", "ingredients", "instructions".`;
+        
+        // Use existing Vercel proxy which calls Gemini
+        response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: prompt
+            })
+        });
+
+        if (!response.ok) throw new Error("Backend error or scraping failed");
+
+        const data = await response.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (text) {
+             const json = parseAndSanitizeAIJSON(text);
+             setManual({
+                name: json.name || "Imported Recipe",
+                ings: Array.isArray(json.ingredients) ? json.ingredients.join('\n') : (json.ingredients || ""),
+                inst: Array.isArray(json.instructions) ? json.instructions.join('\n') : (json.instructions || ""),
+                source: urlInput
+             });
+             setUrlImportMode(false);
+             setUrlInput('');
+        } else {
+             throw new Error("No recipe data found in AI response");
+        }
+
+      } catch(err) {
+          alert("Could not extract recipe from URL. Try pasting the text instead.");
+      } finally {
+          setIsAnalyzing(false);
+      }
+  };
+
     useEffect(() => {
         const timer = setTimeout(() => {
             if (isLoading) setIsLoading(false);
@@ -873,6 +1105,7 @@ const App = () => {
     return (
       <div className={`app-container ${theme}`}>
       <div className="fixed-background"></div>
+      <img src="/mechef.png" alt="" className="bg-bottom-right" />
       
       {/* ... (Previous Modals and Views) */}
       {/* Re-inserted Modals for brevity, logic remains identical to v2.9.66 */}
@@ -947,7 +1180,7 @@ const App = () => {
 
       {activeTab === 'recipes' && (
         <div className="card">
-          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.67</p></div>
+          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.69</p></div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
         {(scoredRecipes || []).map(recipe => {
