@@ -3,7 +3,7 @@ import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
   Link as LinkIcon, Layers, Maximize2, Download, Upload, Copy, FileJson, Camera,
-  Palette
+  Palette, AlertTriangle
 } from 'lucide-react';
 
 // Firebase Imports
@@ -257,7 +257,6 @@ const App = () => {
   useEffect(() => {
     console.log("App Mounted - v2.9.69");
     const root = document.documentElement;
-    // Removed direct DOM manipulation that conflicts with CSS vars
   }, []);
 
   // Handle Tab Switching
@@ -870,7 +869,7 @@ const App = () => {
       setIsAuthLoading(true);
       if (fb.isDummyConfig) { setIsAuthLoading(false); return; }
       try { await signInWithPopup(fb.auth, fb.googleProvider); setIsAuthOpen(false); }
-      catch (e) { setAuthError(e.message); } finally { setIsAuthLoading(false); }
+      catch (e) { setAuthError(e.message || "Sign-in failed"); } finally { setIsAuthLoading(false); }
     };
     const handleEmailAuth = async (e) => {
       e.preventDefault();
@@ -884,7 +883,7 @@ const App = () => {
           await signInWithEmailAndPassword(fb.auth, authForm.email, authForm.password);
         }
         setIsAuthOpen(false);
-      } catch (e) { setAuthError(e.message); } finally { setIsAuthLoading(false); }
+      } catch (e) { setAuthError(e.message || "Authentication failed"); } finally { setIsAuthLoading(false); }
     };
     const handleSignOut = async () => {
       try { if (!fb.isDummyConfig) await signOut(fb.auth); window.location.reload(); }
@@ -1047,7 +1046,6 @@ const App = () => {
       setIsImporting(false);
     };
 
-    // Handle URL Import Submission
     const handleUrlSubmit = async (e) => {
       e.preventDefault();
       if (!urlInput || !user) return;
@@ -1058,7 +1056,6 @@ const App = () => {
         let response;
         const prompt = `Extract the recipe from this URL: ${urlInput}. Return valid JSON with keys: "name", "ingredients", "instructions".`;
         
-        // Use existing Vercel proxy which calls Gemini
         response = await fetch('/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1108,7 +1105,6 @@ const App = () => {
       <img src="/mechef.png" alt="" className="bg-bottom-right" />
       
       {/* ... (Previous Modals and Views) */}
-      {/* Re-inserted Modals for brevity, logic remains identical to v2.9.66 */}
       
       {fullScreenRecipe && (
         <div className={`full-window-overlay ${theme === 'dark' ? 'dark' : ''}`}>
@@ -1129,7 +1125,9 @@ const App = () => {
 
       {deleteConfirmation && (<div className="modal-overlay" onClick={() => setDeleteConfirmation(null)}><div className="modal-card" onClick={e => e.stopPropagation()}><h2 className="text-lg font-bold mb-2">Delete?</h2><p className="text-sm text-muted mb-6">Permanently remove "{String(deleteConfirmation.name)}"?</p><div className="modal-actions"><button className="modal-btn-action bg-red" onClick={confirmDelete}>Delete</button><button className="modal-btn-action bg-gray" onClick={() => setDeleteConfirmation(null)}>Cancel</button></div></div></div>)}
 
-      {isAuthOpen && (<div className="modal-overlay" onClick={() => setIsAuthOpen(false)}><div className="modal-card" onClick={e => e.stopPropagation()}><button className="absolute top-4 right-4 p-1 rounded-full hover:bg-slate-100 transition-colors text-muted" onClick={() => setIsAuthOpen(false)}><X size={18}/></button><div className="text-center mb-6"><h2 className="text-xl font-bold text-primary tracking-tight">RECIPE MATCH</h2><p className="text-sm text-muted mt-1">Sign in to sync</p></div><form onSubmit={handleEmailAuth} className="w-full flex flex-col gap-6">{authMode === 'signup' && (<input className="modal-input" placeholder="Name" required value={authForm.name} onChange={e => setAuthForm({...authForm, name: e.target.value})}/>)}<input className="modal-input" type="email" placeholder="Email" required value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})}/><input className="modal-input" type="password" placeholder="Password" required value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})}/><button className="modal-btn mt-4" type="submit" disabled={isAuthLoading}>{isAuthLoading ? <Loader2 className="animate-spin" size={16}/> : (authMode === 'login' ? 'Log In' : 'Sign Up')}</button></form><div className="w-full flex items-center gap-3 my-4"><div className="h-px bg-border flex-1"></div><span className="text-[10px] text-muted font-bold uppercase">Or</span><div className="h-px bg-border flex-1"></div></div><button className="modal-btn" style={{background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)'}} onClick={handleGoogleLogin}>Google Sign In</button><div className="mt-4 text-center"><button className="text-sm text-muted hover:text-primary font-medium" onClick={() => setAuthMode(m => m === 'login' ? 'signup' : 'login')}>{authMode === 'login' ? "New? Create an account" : "Have an account? Log in"}</button></div></div></div>)}
+      {isAuthOpen && (<div className="modal-overlay" onClick={() => setIsAuthOpen(false)}><div className="modal-card" onClick={e => e.stopPropagation()}><button className="absolute top-4 right-4 p-1 rounded-full hover:bg-slate-100 transition-colors text-muted" onClick={() => setIsAuthOpen(false)}><X size={18}/></button><div className="text-center mb-6"><h2 className="text-xl font-bold text-primary tracking-tight">RECIPE MATCH</h2><p className="text-sm text-muted mt-1">Sign in to sync</p></div>
+      {authError && <div className="text-red-500 text-xs mb-4 text-center">{String(authError)}</div>}
+      <form onSubmit={handleEmailAuth} className="w-full flex flex-col gap-6">{authMode === 'signup' && (<input className="modal-input" placeholder="Name" required value={authForm.name} onChange={e => setAuthForm({...authForm, name: e.target.value})}/>)}<input className="modal-input" type="email" placeholder="Email" required value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})}/><input className="modal-input" type="password" placeholder="Password" required value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})}/><button className="modal-btn mt-4" type="submit" disabled={isAuthLoading}>{isAuthLoading ? <Loader2 className="animate-spin" size={16}/> : (authMode === 'login' ? 'Log In' : 'Sign Up')}</button></form><div className="w-full flex items-center gap-3 my-4"><div className="h-px bg-border flex-1"></div><span className="text-[10px] text-muted font-bold uppercase">Or</span><div className="h-px bg-border flex-1"></div></div><button className="modal-btn" style={{background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)'}} onClick={handleGoogleLogin}>Google Sign In</button><div className="mt-4 text-center"><button className="text-sm text-muted hover:text-primary font-medium" onClick={() => setAuthMode(m => m === 'login' ? 'signup' : 'login')}>{authMode === 'login' ? "New? Create an account" : "Have an account? Log in"}</button></div></div></div>)}
 
       <header className="header">
       <div className="header-content">
