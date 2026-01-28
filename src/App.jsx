@@ -255,17 +255,73 @@ const App = () => {
   const [urlInput, setUrlInput] = useState('');
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.69");
+    console.log("App Mounted - v2.9.72");
     const root = document.documentElement;
   }, []);
 
-  // Handle Tab Switching
+  // --- CORE LOGIC: DEFINED FIRST TO AVOID REFERENCE ERRORS ---
+
+  const getSafeUid = (u) => String(u?.uid || 'guest').replace(/\//g, '_');
+
+  const isIngredientAvailable = (recipeLine, availableSet) => {
+    const lowerLine = String(recipeLine).toLowerCase();
+    for (let availableItem of availableSet) {
+      if (lowerLine.includes(availableItem)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Compute Available Ingredients
+  const availableIngredients = useMemo(() => {
+    const items = pantry || [];
+    const availableSet = new Set();
+    
+    items.forEach(i => {
+      const lowerName = (i.name || "").toLowerCase();
+      const isAvailable = i.status === 'have' || (i.status === undefined && i.available === true);
+      if (isAvailable) availableSet.add(lowerName);
+    });
+
+    Object.keys(MASTER_INGREDIENTS).forEach(cat => {
+      MASTER_INGREDIENTS[cat].forEach(name => {
+        const lowerName = name.toLowerCase();
+        const pItem = items.find(p => p.name.toLowerCase() === lowerName);
+        if (!pItem) {
+             availableSet.add(lowerName); 
+        }
+      });
+    });
+    return availableSet;
+  }, [pantry]);
+
+  // Compute Scored Recipes
+  const scoredRecipes = useMemo(() => {
+    const list = recipes || [];
+
+    return list.map(recipe => {
+      const recipeLines = String(recipe.ingredients || "").split('\n').filter(l => l.trim().length > 0);
+      if (recipeLines.length === 0) return { ...recipe, percent: 0 };
+
+      const matchCount = recipeLines.reduce((count, line) => {
+        return count + (isIngredientAvailable(line, availableIngredients) ? 1 : 0);
+      }, 0);
+
+      return { ...recipe, percent: Math.round((matchCount / recipeLines.length) * 100) };
+    })
+    .filter(r => (r.name || "").toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => (b.percent || 0) - (a.percent || 0));
+  }, [recipes, availableIngredients, search]);
+
+
+  // --- HANDLERS ---
+
   const handleTabChange = (tabId) => {
       setActiveTab(tabId);
       setFullScreenRecipe(null);
   };
 
-  // Splitter Handlers
   const startResizing = () => {
     isResizingRef.current = true;
   };
@@ -277,21 +333,6 @@ const App = () => {
     const newRatio = (e.clientX / window.innerWidth) * 100;
     if (newRatio > 20 && newRatio < 80) setSplitRatio(newRatio);
   };
-
-  useEffect(() => {
-    if (fullScreenRecipe) {
-      window.addEventListener('mousemove', handleResize);
-      window.addEventListener('mouseup', stopResizing);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleResize);
-      window.removeEventListener('mouseup', stopResizing);
-    };
-  }, [fullScreenRecipe]);
-
-  const getSafeUid = (u) => String(u?.uid || 'guest').replace(/\//g, '_');
-
-  // --- ACTIONS & HANDLERS ---
 
   const cycleStatus = async (name, currentStatus) => {
       if (!user) return;
@@ -345,7 +386,308 @@ const App = () => {
       } catch (e) { console.error(e); }
   };
 
-  // --- RENDER HELPERS ---
+  const confirmDelete = async () => {
+      if (!deleteConfirmation || !user) return;
+      const { id, collection: colName } = deleteConfirmation;
+      setDeleteConfirmation(null);
+      try {
+        await deleteDoc(doc(fb.db, 'artifacts', appId, 'users', user.uid, colName, id));
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+  const handlePantryAdd = async (e) => {
+      e.preventDefault();
+      const val = newItem.trim();
+      if (!val || !user) return;
+
+      const valLower = val.toLowerCase();
+      // ... Validation logic ...
+      
+      const existingCustom = (pantry || []).find(p => p.name.toLowerCase() === valLower);
+      if (existingCustom) {
+        alert(`"${val}" is already in your pantry.`);
+        return;
+      }
+      setNewItem('');
+      try {
+        await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'pantry'), {
+          name: toTitleCase(val),
+                     category: activePantryCategory,
+                     status: 'have',
+                     available: true
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    const handleImportJSON = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const importedRecipes = JSON.parse(event.target.result);
+                if (!Array.isArray(importedRecipes)) throw new Error("Invalid format");
+                let count = 0;
+                for (const recipe of importedRecipes) {
+                    const { id, ...recipeData } = recipe; 
+                    await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
+                        ...recipeData,
+                        createdAt: Date.now()
+                    });
+                    count++;
+                }
+                setTimeout(() => setActiveTab('recipes'), 1000);
+            } catch (err) {
+                console.error("Import failed: " + err.message);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
+
+    const handleExportData = () => {
+        if (!recipes || recipes.length === 0) {
+            alert("No recipes to export.");
+            return;
+        }
+        const dataStr = JSON.stringify(recipes, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `recipes_backup_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleCopyToClipboard = () => {
+        if (!recipes || recipes.length === 0) {
+            alert("No recipes to copy.");
+            return;
+        }
+        const dataStr = JSON.stringify(recipes, null, 2);
+        navigator.clipboard.writeText(dataStr).then(() => {
+            alert("Recipes copied to clipboard!");
+        }).catch(err => {
+            console.error("Clipboard failed: " + err);
+        });
+    };
+
+    const handleGoogleLogin = async () => {
+      setIsAuthLoading(true);
+      if (fb.isDummyConfig) { 
+          setIsAuthLoading(false); 
+          setAuthError("Offline Mode: Cloud sign-in unavailable.");
+          return; 
+      }
+      try { await signInWithPopup(fb.auth, fb.googleProvider); setIsAuthOpen(false); }
+      catch (e) { setAuthError(e.message || "Sign-in failed"); } finally { setIsAuthLoading(false); }
+    };
+
+    const handleEmailAuth = async (e) => {
+      e.preventDefault();
+      setIsAuthLoading(true);
+      if (fb.isDummyConfig) { 
+          setIsAuthLoading(false); 
+          setAuthError("Offline Mode: Cloud sign-in unavailable.");
+          return; 
+      }
+      try {
+        if (authMode === 'signup') {
+          const res = await createUserWithEmailAndPassword(fb.auth, authForm.email, authForm.password);
+          await updateProfile(res.user, { displayName: authForm.name });
+        } else {
+          await signInWithEmailAndPassword(fb.auth, authForm.email, authForm.password);
+        }
+        setIsAuthOpen(false);
+      } catch (e) { setAuthError(e.message || "Authentication failed"); } finally { setIsAuthLoading(false); }
+    };
+
+    const handleSignOut = async () => {
+      try { if (!fb.isDummyConfig) await signOut(fb.auth); window.location.reload(); }
+      catch (e) { console.error(e); }
+    };
+
+    const handleLocalParse = () => {
+      if (!rawTextImport.trim()) return;
+      const lines = rawTextImport.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length < 2) return;
+      const title = lines[0];
+      const ingredients = [];
+      const instructions = [];
+      let isInst = false;
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.match(/(instruction|step|method|direction)/i)) { isInst = true; continue; }
+        if (line.match(/(ingredient|items|need)/i)) { isInst = false; continue; }
+        if (isInst) instructions.push(line);
+        else ingredients.push(line);
+      }
+      setManual({ name: title, ings: ingredients.join('\n'), inst: instructions.join('\n'), source: "Manual Text Import" });
+      setRawTextImport('');
+    };
+
+    const getRecipeFromImage = async (base64Data) => {
+      const prompt = `Extract the recipe from this image. Return valid JSON with these keys: "name" (string), "ingredients" (single string with newlines), "instructions" (single string with newlines). If no recipe is found, return null.`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); 
+      try {
+        let response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: prompt, base64Data: base64Data }),
+            signal: controller.signal
+          });
+        clearTimeout(timeoutId);
+        if (!response.ok) return null;
+        const data = await response.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          try {
+            const json = parseAndSanitizeAIJSON(text);
+            return {
+              name: typeof json.name === 'string' ? json.name : "Scanned Recipe",
+              ingredients: Array.isArray(json.ingredients) ? json.ingredients.join('\n') : (typeof json.ingredients === 'string' ? json.ingredients : ""),
+              instructions: Array.isArray(json.instructions) ? json.instructions.join('\n') : (typeof json.instructions === 'string' ? json.instructions : "")
+            };
+          } catch (e) { return null; }
+        }
+        return null;
+      } catch (e) {
+        clearTimeout(timeoutId);
+        return null;
+      }
+    };
+
+    const handleImageSelect = async (e) => {
+      const files = Array.from(e.target.files);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (!files.length) return;
+      if (files.length === 1) {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          setIsAnalyzing(true);
+          try {
+            const data = await getRecipeFromImage(reader.result.split(',')[1]);
+            if (data) {
+              setManual({ name: data.name, ings: data.ingredients, inst: data.instructions, source: "AI Photo Scan" });
+            }
+          } catch(err) { console.error(err); } finally { setIsAnalyzing(false); }
+        };
+        reader.readAsDataURL(files[0]);
+      } else {
+        setBatchProgress({ current: 0, total: files.length });
+        setIsAnalyzing(true);
+        const filesToProcess = [...files];
+        for (let i = 0; i < filesToProcess.length; i++) {
+          setBatchProgress({ current: i + 1, total: filesToProcess.length });
+          try {
+            const base64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result.split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(filesToProcess[i]);
+            });
+            if(i > 0) await new Promise(r => setTimeout(r, 1000));
+            const recipeData = await getRecipeFromImage(base64);
+            if (recipeData) {
+               try {
+                  await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
+                    name: recipeData.name,
+                    ingredients: recipeData.ingredients,
+                    instructions: recipeData.instructions,
+                    source: "AI Batch Scan",
+                    createdAt: Date.now()
+                  });
+               } catch (saveError) { console.error(saveError); }
+            }
+          } catch (e) { console.error(e); }
+        }
+        setIsAnalyzing(false);
+        setBatchProgress({ current: 0, total: 0 });
+        setTimeout(() => setActiveTab('recipes'), 1000); 
+      }
+    };
+
+    const manualSaveNewRecipe = async () => {
+      if (!manual.name || !user) return;
+      setIsImporting(true);
+      const recipePayload = {
+        name: manual.name,
+        ingredients: manual.ings,
+        instructions: manual.inst,
+        source: manual.source,
+        createdAt: Date.now()
+      };
+      try {
+        await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), recipePayload);
+        setManual({ name: '', ings: '', inst: '', source: '' });
+        setUrlInput('');
+        setActiveTab('recipes');
+      } catch (e) { console.error(e); }
+      setIsImporting(false);
+    };
+
+    const handleUrlSubmit = async (e) => {
+      e.preventDefault();
+      if (!urlInput || !user) return;
+      setIsAnalyzing(true);
+      try {
+        let response;
+        const prompt = `Extract the recipe from this URL: ${urlInput}. Return valid JSON with keys: "name", "ingredients", "instructions".`;
+        response = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: prompt })
+        });
+        if (!response.ok) throw new Error("Backend error or scraping failed");
+        const data = await response.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+             const json = parseAndSanitizeAIJSON(text);
+             setManual({
+                name: json.name || "Imported Recipe",
+                ings: Array.isArray(json.ingredients) ? json.ingredients.join('\n') : (json.ingredients || ""),
+                inst: Array.isArray(json.instructions) ? json.instructions.join('\n') : (json.instructions || ""),
+                source: urlInput
+             });
+             setUrlImportMode(false);
+             setUrlInput('');
+        } else {
+             throw new Error("No recipe data found in AI response");
+        }
+      } catch(err) {
+          alert("Could not extract recipe from URL. Try pasting the text instead.");
+      } finally {
+          setIsAnalyzing(false);
+      }
+  };
+
+  const handleEditRecipe = (recipe) => {
+      setEditingRecipeId(recipe.id);
+      setEditRecipeForm({
+        name: recipe.name,
+        ingredients: recipe.ingredients,
+        instructions: recipe.instructions
+      });
+  };
+
+  const saveEditedRecipe = async () => {
+      if (!editingRecipeId || !user) return;
+      try {
+        await updateDoc(doc(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes', editingRecipeId), {
+          name: editRecipeForm.name,
+          ingredients: editRecipeForm.ingredients,
+          instructions: editRecipeForm.instructions
+        });
+        setEditingRecipeId(null);
+      } catch (e) { console.error(e); }
+  };
 
   const renderColumn = (statusKey, title) => {
       const ingredients = MASTER_INGREDIENTS[activePantryCategory] || [];
@@ -389,59 +731,7 @@ const App = () => {
       );
   };
 
-  // Compute Available Ingredients
-  const availableIngredients = useMemo(() => {
-    const items = pantry || [];
-    const availableSet = new Set();
-    
-    items.forEach(i => {
-      const lowerName = (i.name || "").toLowerCase();
-      const isAvailable = i.status === 'have' || (i.status === undefined && i.available === true);
-      if (isAvailable) availableSet.add(lowerName);
-    });
-
-    Object.keys(MASTER_INGREDIENTS).forEach(cat => {
-      MASTER_INGREDIENTS[cat].forEach(name => {
-        const lowerName = name.toLowerCase();
-        // If not in DB, assume have for Master list as per original logic? 
-        // Original logic was complicated. Simplifying: 
-        // If it's in pantry DB, trust DB. If not in DB, assume available if it's a master item?
-        // Let's stick to the previous reliable logic:
-        const pItem = items.find(p => p.name.toLowerCase() === lowerName);
-        if (!pItem) {
-             availableSet.add(lowerName); // Default have for master items not explicitly set to 'dont_have'
-        }
-      });
-    });
-    return availableSet;
-  }, [pantry]);
-
-  const isIngredientAvailable = (recipeLine, availableSet) => {
-    const lowerLine = String(recipeLine).toLowerCase();
-    for (let availableItem of availableSet) {
-      if (lowerLine.includes(availableItem)) {
-        return true;
-      }
-    }
-    return false;
-  };
-
-  const scoredRecipes = useMemo(() => {
-    const list = recipes || [];
-
-    return list.map(recipe => {
-      const recipeLines = String(recipe.ingredients || "").split('\n').filter(l => l.trim().length > 0);
-      if (recipeLines.length === 0) return { ...recipe, percent: 0 };
-
-      const matchCount = recipeLines.reduce((count, line) => {
-        return count + (isIngredientAvailable(line, availableIngredients) ? 1 : 0);
-      }, 0);
-
-      return { ...recipe, percent: Math.round((matchCount / recipeLines.length) * 100) };
-    })
-    .filter(r => (r.name || "").toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => (b.percent || 0) - (a.percent || 0));
-  }, [recipes, availableIngredients, search]);
+  // --- EFFECTS ---
 
   useEffect(() => {
     // Theme Colors Logic
@@ -758,344 +1048,94 @@ const App = () => {
     return () => document.head.removeChild(style);
   }, [theme, colorTheme]);
 
-  const handlePantryAdd = async (e) => {
-      e.preventDefault();
-      const val = newItem.trim();
-      if (!val || !user) return;
+  useEffect(() => {
+    if (fullScreenRecipe) {
+      window.addEventListener('mousemove', handleResize);
+      window.addEventListener('mouseup', stopResizing);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleResize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [fullScreenRecipe]);
 
-      const valLower = val.toLowerCase();
-      let isMaster = false;
-      let masterCat = '';
-      Object.keys(MASTER_INGREDIENTS).forEach(cat => {
-        if (MASTER_INGREDIENTS[cat].some(i => i.toLowerCase() === valLower)) {
-          isMaster = true;
-          masterCat = cat;
+  useEffect(() => {
+    if (theme) localStorage.setItem('rm_theme_v143', theme);
+    if (colorTheme) localStorage.setItem('rm_color_theme', colorTheme);
+  }, [theme, colorTheme]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+        if (isLoading) setIsLoading(false);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
+
+  // Unified Session Management
+  useEffect(() => {
+    let isMounted = true;
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted && isLoading) setIsLoading(false);
+    }, 3500);
+
+      const initAuth = async () => {
+        if (fb.initError) return;
+        if (fb.isDummyConfig) {
+          setUser({ uid: 'offline-guest', isAnonymous: true, displayName: 'Guest' });
+          setIsLoading(false);
+          return;
         }
-      });
-
-      if (isMaster) {
-        alert(`"${val}" is already a standard ingredient in the "${masterCat}" category.`);
-        return;
-      }
-
-      const existingCustom = (pantry || []).find(p => p.name.toLowerCase() === valLower);
-      if (existingCustom) {
-        alert(`"${val}" is already in your pantry.`);
-        return;
-      }
-
-      setNewItem('');
-
-      try {
-        await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'pantry'), {
-          name: toTitleCase(val),
-                     category: activePantryCategory,
-                     status: 'have',
-                     available: true
-        });
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    const confirmDelete = async () => {
-      if (!deleteConfirmation || !user) return;
-      const { id, collection: colName } = deleteConfirmation;
-      setDeleteConfirmation(null);
-      try {
-        await deleteDoc(doc(fb.db, 'artifacts', appId, 'users', user.uid, colName, id));
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    const handleImportJSON = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            try {
-                const importedRecipes = JSON.parse(event.target.result);
-                if (!Array.isArray(importedRecipes)) throw new Error("Invalid format");
-                
-                let count = 0;
-                for (const recipe of importedRecipes) {
-                    const { id, ...recipeData } = recipe; 
-                    await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
-                        ...recipeData,
-                        createdAt: Date.now()
-                    });
-                    count++;
-                }
-                setTimeout(() => setActiveTab('recipes'), 1000);
-            } catch (err) {
-                console.error("Import failed: " + err.message);
-            }
-        };
-        reader.readAsText(file);
-        e.target.value = '';
-    };
-
-    const handleExportData = () => {
-        if (!recipes || recipes.length === 0) {
-            alert("No recipes to export.");
-            return;
-        }
-        const dataStr = JSON.stringify(recipes, null, 2);
-        const blob = new Blob([dataStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `recipes_backup_${new Date().toISOString().slice(0,10)}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-    };
-
-    const handleCopyToClipboard = () => {
-        if (!recipes || recipes.length === 0) {
-            alert("No recipes to copy.");
-            return;
-        }
-        const dataStr = JSON.stringify(recipes, null, 2);
-        navigator.clipboard.writeText(dataStr).then(() => {
-            alert("Recipes copied to clipboard!");
-        }).catch(err => {
-            console.error("Clipboard failed: " + err);
-        });
-    };
-
-    const handleGoogleLogin = async () => {
-      setIsAuthLoading(true);
-      if (fb.isDummyConfig) { setIsAuthLoading(false); return; }
-      try { await signInWithPopup(fb.auth, fb.googleProvider); setIsAuthOpen(false); }
-      catch (e) { setAuthError(e.message || "Sign-in failed"); } finally { setIsAuthLoading(false); }
-    };
-    const handleEmailAuth = async (e) => {
-      e.preventDefault();
-      setIsAuthLoading(true);
-      if (fb.isDummyConfig) { setIsAuthLoading(false); return; }
-      try {
-        if (authMode === 'signup') {
-          const res = await createUserWithEmailAndPassword(fb.auth, authForm.email, authForm.password);
-          await updateProfile(res.user, { displayName: authForm.name });
-        } else {
-          await signInWithEmailAndPassword(fb.auth, authForm.email, authForm.password);
-        }
-        setIsAuthOpen(false);
-      } catch (e) { setAuthError(e.message || "Authentication failed"); } finally { setIsAuthLoading(false); }
-    };
-    const handleSignOut = async () => {
-      try { if (!fb.isDummyConfig) await signOut(fb.auth); window.location.reload(); }
-      catch (e) { console.error(e); }
-    };
-
-    const handleLocalParse = () => {
-      if (!rawTextImport.trim()) return;
-      const lines = rawTextImport.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      if (lines.length < 2) return;
-      const title = lines[0];
-      const ingredients = [];
-      const instructions = [];
-      let isInst = false;
-
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        if (line.match(/(instruction|step|method|direction)/i)) {
-          isInst = true;
-          continue;
-        }
-        if (line.match(/(ingredient|items|need)/i)) {
-          isInst = false;
-          continue;
-        }
-        if (isInst) instructions.push(line);
-        else ingredients.push(line);
-      }
-
-      setManual({
-        name: title,
-        ings: ingredients.join('\n'),
-        inst: instructions.join('\n'),
-        source: "Manual Text Import"
-      });
-      setRawTextImport('');
-    };
-
-    const getRecipeFromImage = async (base64Data) => {
-      const prompt = `Extract the recipe from this image. Return valid JSON with these keys: "name" (string), "ingredients" (single string with newlines), "instructions" (single string with newlines). If no recipe is found, return null.`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); 
-
-      try {
-        let response = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt: prompt,
-              base64Data: base64Data
-            }),
-            signal: controller.signal
-          });
-        
-        clearTimeout(timeoutId);
-        if (!response.ok) return null;
-        const data = await response.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        
-        if (text) {
-          try {
-            const json = parseAndSanitizeAIJSON(text);
-            return {
-              name: typeof json.name === 'string' ? json.name : "Scanned Recipe",
-              ingredients: Array.isArray(json.ingredients) ? json.ingredients.join('\n') : (typeof json.ingredients === 'string' ? json.ingredients : ""),
-              instructions: Array.isArray(json.instructions) ? json.instructions.join('\n') : (typeof json.instructions === 'string' ? json.instructions : "")
-            };
-          } catch (e) {
-            return null;
-          }
-        }
-        return null;
-
-      } catch (e) {
-        clearTimeout(timeoutId);
-        return null;
-      }
-    };
-
-    const handleImageSelect = async (e) => {
-      const files = Array.from(e.target.files);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      if (!files.length) return;
-
-      if (files.length === 1) {
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          setIsAnalyzing(true);
-          try {
-            const data = await getRecipeFromImage(reader.result.split(',')[1]);
-            if (data) {
-              setManual({
-                name: data.name,
-                ings: data.ingredients,
-                inst: data.instructions,
-                source: "AI Photo Scan"
-              });
-            }
-          } catch(err) {
-            console.error(err);
-          } finally {
-            setIsAnalyzing(false);
-          }
-        };
-        reader.readAsDataURL(files[0]);
-      } else {
-        setBatchProgress({ current: 0, total: files.length });
-        setIsAnalyzing(true);
-        const filesToProcess = [...files];
-
-        for (let i = 0; i < filesToProcess.length; i++) {
-          setBatchProgress({ current: i + 1, total: filesToProcess.length });
-          try {
-            const base64 = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result.split(',')[1]);
-              reader.onerror = reject;
-              reader.readAsDataURL(filesToProcess[i]);
-            });
-            if(i > 0) await new Promise(r => setTimeout(r, 1000));
-            const recipeData = await getRecipeFromImage(base64);
-            if (recipeData) {
-               try {
-                  await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
-                    name: recipeData.name,
-                    ingredients: recipeData.ingredients,
-                    instructions: recipeData.instructions,
-                    source: "AI Batch Scan",
-                    createdAt: Date.now()
-                  });
-               } catch (saveError) { console.error(saveError); }
-            }
-          } catch (e) { console.error(e); }
-        }
-        setIsAnalyzing(false);
-        setBatchProgress({ current: 0, total: 0 });
-        setTimeout(() => setActiveTab('recipes'), 1000); 
-      }
-    };
-
-    const manualSaveNewRecipe = async () => {
-      if (!manual.name || !user) return;
-      setIsImporting(true);
-      const recipePayload = {
-        name: manual.name,
-        ingredients: manual.ings,
-        instructions: manual.inst,
-        source: manual.source,
-        createdAt: Date.now()
       };
 
-      try {
-        await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), recipePayload);
-        setManual({ name: '', ings: '', inst: '', source: '' });
-        setUrlInput('');
-        setActiveTab('recipes');
-      } catch (e) {
-        console.error(e);
-      }
-      setIsImporting(false);
-    };
-
-    const handleUrlSubmit = async (e) => {
-      e.preventDefault();
-      if (!urlInput || !user) return;
-      
-      setIsAnalyzing(true);
-      
-      try {
-        let response;
-        const prompt = `Extract the recipe from this URL: ${urlInput}. Return valid JSON with keys: "name", "ingredients", "instructions".`;
-        
-        response = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt: prompt
-            })
-        });
-
-        if (!response.ok) throw new Error("Backend error or scraping failed");
-
-        const data = await response.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        
-        if (text) {
-             const json = parseAndSanitizeAIJSON(text);
-             setManual({
-                name: json.name || "Imported Recipe",
-                ings: Array.isArray(json.ingredients) ? json.ingredients.join('\n') : (json.ingredients || ""),
-                inst: Array.isArray(json.instructions) ? json.instructions.join('\n') : (json.instructions || ""),
-                source: urlInput
-             });
-             setUrlImportMode(false);
-             setUrlInput('');
-        } else {
-             throw new Error("No recipe data found in AI response");
+      if (!fb.initError) {
+        initAuth();
+        if (!fb.isDummyConfig) {
+          const unsubscribe = onAuthStateChanged(fb.auth, async (usr) => {
+            if (!isMounted) return;
+            if (usr) {
+              setUser(usr);
+            } else {
+              if (!isAutoLoginAttempted.current) {
+                isAutoLoginAttempted.current = true;
+                try {
+                  if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(fb.auth, __initial_auth_token);
+                  } else {
+                    await signInAnonymously(fb.auth);
+                  }
+                } catch (e) {
+                  setIsLoading(false);
+                }
+              } else {
+                setIsLoading(false);
+              }
+            }
+          });
+          return () => { isMounted = false; unsubscribe(); clearTimeout(safetyTimeout); };
         }
-
-      } catch(err) {
-          alert("Could not extract recipe from URL. Try pasting the text instead.");
-      } finally {
-          setIsAnalyzing(false);
+      } else {
+        setIsLoading(false);
       }
-  };
+  }, []);
 
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            if (isLoading) setIsLoading(false);
-        }, 1500);
-        return () => clearTimeout(timer);
-    }, [isLoading]);
+  useEffect(() => {
+    if (!user || fb.initError) return;
+    const safeUid = user.uid; 
+    const recipesRef = collection(fb.db, 'artifacts', appId, 'users', safeUid, 'recipes');
+    const pantryRef = collection(fb.db, 'artifacts', appId, 'users', safeUid, 'pantry');
+
+    const unsubR = onSnapshot(recipesRef, (s) => {
+      const data = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      setRecipes(data);
+    }, (err) => { setRecipes([]); });
+
+    const unsubP = onSnapshot(pantryRef, (s) => {
+      const data = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      setPantry(data);
+    }, (err) => { setPantry([]); });
+
+    return () => { unsubR(); unsubP(); };
+  }, [user?.uid]);
 
     if (isLoading) return <div className="app-container dark" style={{justifyContent:'center', display:'flex', alignItems:'center'}}><Loader2 className="animate-spin text-orange-500 mx-auto mb-4" size={56}/></div>;
 
@@ -1178,7 +1218,7 @@ const App = () => {
 
       {activeTab === 'recipes' && (
         <div className="card">
-          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.69</p></div>
+          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.72</p></div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
         {(scoredRecipes || []).map(recipe => {
