@@ -283,7 +283,7 @@ const App = () => {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.86");
+    console.log("App Mounted - v2.9.87");
     const root = document.documentElement;
     // CSP Injection attempt to fix Vercel Toolbar noise
     const meta = document.createElement('meta');
@@ -1017,13 +1017,23 @@ const App = () => {
                     
                     const recipeData = await getRecipeFromImage(base64Data);
                     if (recipeData) {
-                        await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
+                        // FIX: Wrap addDoc in a race to prevent hanging on zombie networks
+                        const docData = {
                             name: recipeData.name,
                             ingredients: recipeData.ingredients,
                             instructions: recipeData.instructions,
                             source: "AI Batch Scan",
                             createdAt: Date.now()
-                        });
+                        };
+                        
+                        const savePromise = addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), docData);
+                        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Save Timeout")), 2000));
+                        
+                        try {
+                            await Promise.race([savePromise, timeoutPromise]);
+                        } catch (timeoutErr) {
+                            console.warn("Batch save timed out (likely offline), proceeding...");
+                        }
                     }
                 } catch (e) { 
                     console.error("Error processing batch item " + i, e); 
@@ -1345,7 +1355,7 @@ const App = () => {
 
       {activeTab === 'recipes' && (
         <div className="card">
-          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.86</p></div>
+          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.87</p></div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
         {(scoredRecipes || []).map(recipe => {
