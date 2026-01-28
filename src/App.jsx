@@ -283,7 +283,7 @@ const App = () => {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.87");
+    console.log("App Mounted - v2.9.88");
     const root = document.documentElement;
     // CSP Injection attempt to fix Vercel Toolbar noise
     const meta = document.createElement('meta');
@@ -916,11 +916,17 @@ const App = () => {
     const resizeImage = (file, maxWidth = 1024) => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
+            const timer = setTimeout(() => {
+                reader.abort();
+                reject(new Error("Image processing timed out"));
+            }, 10000); // 10s Timeout
+
             reader.readAsDataURL(file);
             reader.onload = (event) => {
                 const img = new Image();
                 img.src = event.target.result;
                 img.onload = () => {
+                    clearTimeout(timer);
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     
@@ -939,9 +945,15 @@ const App = () => {
                     // Return Base64 string directly (split header)
                     resolve(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
                 };
-                img.onerror = (e) => reject(new Error("Image load failed"));
+                img.onerror = (e) => {
+                    clearTimeout(timer);
+                    reject(new Error("Image load failed"));
+                };
             };
-            reader.onerror = (e) => reject(new Error("File read failed"));
+            reader.onerror = (e) => {
+                clearTimeout(timer);
+                reject(new Error("File read failed"));
+            };
         });
     };
 
@@ -1355,7 +1367,7 @@ const App = () => {
 
       {activeTab === 'recipes' && (
         <div className="card">
-          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.87</p></div>
+          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.88</p></div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
         {(scoredRecipes || []).map(recipe => {
@@ -1384,7 +1396,9 @@ const App = () => {
       {activeTab === 'import' && (
         <div className="space-y-6">
         <div className="card"><div className="font-black text-[10px] uppercase mb-4 text-primary flex items-center gap-2"><Download size={14}/> Export Data</div><div className="grid grid-cols-2 gap-4"><button onClick={handleExportData} className="import-option flex flex-col items-center justify-center p-4"><Download className="mb-2 text-green-500" size={24}/><span className="text-sm font-bold">Download JSON</span><span className="text-[10px] text-muted">Save to file</span></button><button onClick={handleCopyToClipboard} className="import-option flex flex-col items-center justify-center p-4"><Copy className="mb-2 text-blue-500" size={24}/><span className="text-sm font-bold">Copy to Clipboard</span><span className="text-[10px] text-muted">Paste elsewhere</span></button></div></div>
-        <div className="card"><div className="font-black text-[10px] uppercase mb-4 text-primary flex items-center gap-2"><Upload size={14}/> Import Data</div><div className="grid grid-cols-2 gap-4"><div className="import-option" onClick={() => jsonImportRef.current?.click()}><input type="file" ref={jsonImportRef} className="hidden-file-input" accept=".json" onChange={handleImportJSON} /><FileJson className="mx-auto mb-2 text-purple-500" size={24}/><div className="text-sm font-bold">Restore JSON</div><div className="text-[10px] text-muted">Load backup file</div></div><div className="import-option" onClick={() => fileInputRef.current?.click()}><input type="file" ref={fileInputRef} className="hidden-file-input" accept="image/*" multiple onChange={handleImageSelect} />{isAnalyzing ? <Loader2 className="animate-spin mx-auto mb-2 text-primary" size={24}/> : <Layers className="mx-auto mb-2 text-primary" size={24}/>}<div className="text-sm font-bold">Scan Photos</div><div className="text-[10px] text-muted">AI Recipe Scan</div></div><div className="import-option" onClick={() => setUrlImportMode(true)}><LinkIcon className="mx-auto mb-2 text-muted" size={24}/><div className="text-sm font-bold text-muted">Import URL</div><div className="text-[10px] text-muted">Web Page</div></div><div className="import-option" onClick={() => cameraInputRef.current?.click()}><input type="file" ref={cameraInputRef} className="hidden-file-input" accept="image/*" capture="environment" onChange={handleImageSelect} /><Camera className="mx-auto mb-2 text-primary" size={24}/><div className="text-sm font-bold">Take Photo</div><div className="text-[10px] text-muted">Use Camera</div></div></div></div>
+        <div className="card"><div className="font-black text-[10px] uppercase mb-4 text-primary flex items-center gap-2"><Upload size={14}/> Import Data</div><div className="grid grid-cols-2 gap-4"><div className="import-option" onClick={() => jsonImportRef.current?.click()}><input type="file" ref={jsonImportRef} className="hidden-file-input" accept=".json" onChange={handleImportJSON} /><FileJson className="mx-auto mb-2 text-purple-500" size={24}/><div className="text-sm font-bold">Restore JSON</div><div className="text-[10px] text-muted">Load backup file</div></div><div className="import-option" onClick={() => fileInputRef.current?.click()}><input type="file" ref={fileInputRef} className="hidden-file-input" accept="image/*" multiple onChange={handleImageSelect} />{isAnalyzing ? <Loader2 className="animate-spin mx-auto mb-2 text-primary" size={24}/> : <Layers className="mx-auto mb-2 text-primary" size={24}/>}<div className="text-sm font-bold">Scan Photos</div><div className="text-[10px] text-muted">
+        {isAnalyzing && batchProgress.total > 0 ? `Processing ${batchProgress.current}/${batchProgress.total}` : "AI Recipe Scan"}
+        </div></div><div className="import-option" onClick={() => setUrlImportMode(true)}><LinkIcon className="mx-auto mb-2 text-muted" size={24}/><div className="text-sm font-bold text-muted">Import URL</div><div className="text-[10px] text-muted">Web Page</div></div><div className="import-option" onClick={() => cameraInputRef.current?.click()}><input type="file" ref={cameraInputRef} className="hidden-file-input" accept="image/*" capture="environment" onChange={handleImageSelect} /><Camera className="mx-auto mb-2 text-primary" size={24}/><div className="text-sm font-bold">Take Photo</div><div className="text-[10px] text-muted">Use Camera</div></div></div></div>
         {urlImportMode && (<div className="card bg-slate-100 dark:bg-slate-800/50 p-4"><div className="flex justify-between items-center mb-2"><span className="text-xs font-bold text-muted uppercase">Import from Web</span><button onClick={() => setUrlImportMode(false)}><X size={14}/></button></div><div className="flex gap-2"><input className="input-field text-sm" placeholder="Paste recipe URL here..." value={urlInput} onChange={(e) => setUrlInput(e.target.value)}/><button className="btn-action btn-sm" onClick={handleUrlSubmit} disabled={isAnalyzing}>{isAnalyzing ? <Loader2 className="animate-spin" size={14}/> : "Go"}</button></div></div>)}
         <div className="card bg-slate-100 dark:bg-slate-800/50"><div className="font-black text-[10px] uppercase mb-4 text-primary flex items-center gap-2"><AlignLeft size={14}/> Text Parser</div><div className="space-y-3"><AutoTextarea className="textarea-field auto-expand-textarea" placeholder="Paste full text here..." value={rawTextImport} onChange={e => setRawTextImport(e.target.value)}/><button className="btn-action w-full bg-slate-500 btn-sm" onClick={handleLocalParse} disabled={!rawTextImport.trim()}><ClipboardType size={16}/> Parse Text</button></div></div>
         <div className="card"><div className="font-black text-[10px] uppercase mb-4 text-muted">Creative Studio</div><div className="space-y-4"><input className="input-field" placeholder="Name" value={manual.name} onChange={e => setManual({...manual, name: e.target.value})}/><AutoTextarea className="textarea-field" placeholder="Ingredients" value={manual.ings} onChange={e => setManual({...manual, ings: e.target.value})}/><AutoTextarea className="textarea-field" placeholder="Instructions" value={manual.inst} onChange={e => setManual({...manual, inst: e.target.value})}/><button className="btn-action w-full btn-sm" onClick={manualSaveNewRecipe} disabled={isImporting || !manual.name}><SaveIcon size={20}/> Save</button></div></div>
