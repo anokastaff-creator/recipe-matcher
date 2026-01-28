@@ -3,7 +3,7 @@ import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
   Link as LinkIcon, Layers, Maximize2, Download, Upload, Copy, FileJson, Camera,
-  Palette
+  Palette, AlertTriangle
 } from 'lucide-react';
 
 // Firebase Imports
@@ -198,7 +198,6 @@ const AutoTextarea = ({ value, onChange, className, placeholder }) => {
 };
 
 const App = () => {
-  // 1. STATE & REFS
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('recipes');
@@ -252,8 +251,339 @@ const App = () => {
   const cameraInputRef = useRef(null);
   const [urlImportMode, setUrlImportMode] = useState(false);
   const [urlInput, setUrlInput] = useState('');
+  
+  // New States for Progress bars
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
 
-  // --- 2. CORE LOGIC (Defined BEFORE Usage) ---
+  useEffect(() => {
+    console.log("App Mounted - v2.9.81");
+    // Ensure CSS root variables are set correctly on mount
+    const root = document.documentElement;
+    // CSP Injection attempt to fix Vercel Toolbar noise
+    const meta = document.createElement('meta');
+    meta.httpEquiv = "Content-Security-Policy";
+    meta.content = "worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data:;";
+    document.head.appendChild(meta);
+  }, []);
+  
+  // --- CSS Injection ---
+  useEffect(() => {
+    const colors = {
+      orange: { primary: '#fb923c', dark: '#ea580c', tint: 'rgba(251, 146, 60, 0.1)' },
+          blue: { primary: '#38bdf8', dark: '#0284c7', tint: 'rgba(56, 189, 248, 0.1)' }
+    };
+    const activeColors = colors[colorTheme];
+
+    const style = document.createElement('style');
+    style.innerHTML = `
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    
+    /* Default / Light Mode Scoped to App Container */
+    .app-container {
+      --primary: ${activeColors.primary};
+      --primary-dark: ${activeColors.dark};
+      --bg: transparent;
+      --card: rgba(255, 255, 255, 0.95);
+      --text: #1e293b;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --header: rgba(255, 255, 255, 0.98);
+      --input-bg: #f8fafc;
+    }
+
+    /* Dark Mode Scoped to App Container */
+    .app-container.dark {
+      --primary: ${activeColors.primary};
+      --primary-dark: ${activeColors.dark};
+      --bg: transparent;
+      --card: rgba(30, 41, 59, 0.95);
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --border: #334155;
+      --header: rgba(15, 23, 42, 0.98);
+      --input-bg: rgba(255,255,255,0.05);
+    }
+
+    /* UTILITY CLASSES */
+    .text-primary { color: var(--primary); }
+
+    html, body {
+      margin: 0; padding: 0; min-height: 100%;
+    }
+    
+    /* Background logic */
+    .fixed-background { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: -10; background-color: #f8fafc; background-image: url('https://images.unsplash.com/photo-1495195134817-aeb325a55b65?q=80&w=1776&auto=format&fit=crop'); background-size: cover; background-position: center; background-attachment: fixed; }
+    .fixed-background::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.7); }
+    
+    /* Dark mode background override */
+    .app-container.dark .fixed-background { background-color: #0f172a; }
+    .app-container.dark .fixed-background::after { background: rgba(15, 23, 42, 0.85); }
+    
+    .app-container { width: 100%; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding-bottom: 80px; position: relative; overflow-x: hidden; color: var(--text); }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .animate-spin { animation: spin 1s linear infinite; }
+
+    /* Header Styles */
+    .header { width: 100%; position: sticky; top: 0; background: var(--header); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); z-index: 100; display: flex; justify-content: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .header-content {
+      width: 95%; max-width: 1000px; padding: 12px 0;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 8px; color: var(--primary);
+      flex: 1 0 auto; margin-right: auto;
+    }
+    .header-actions {
+      flex: 0 0 auto;
+      display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 8px;
+    }
+    .tabs {
+      display: flex; background: transparent; padding: 0; gap: 8px;
+      order: 3; width: 100%; overflow-x: auto; margin-top: 4px;
+      justify-content: flex-start;
+      -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    }
+    .tab-btn {
+      padding: 8px 16px; border: 1px solid transparent; border-radius: 99px; cursor: pointer;
+      font-weight: 600; font-size: 13px; color: var(--muted); background: transparent;
+      transition: 0.2s; white-space: nowrap; flex: 0 0 auto;
+    }
+    .tab-btn.active { background: var(--input-bg); color: var(--text); border-color: var(--border); }
+
+    .main-content { width: 95%; max-width: 800px; margin: 0 auto; padding: 24px 0; position: relative; z-index: 1; }
+    .card { background: var(--card); border-radius: 16px; border: 1px solid var(--border); padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    
+    /* Inputs */
+    .input-field, .textarea-field {
+      width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--input-bg); color: var(--text); outline: none;
+      transition: 0.2s; font-family: inherit; font-size: 15px;
+    }
+    .input-field:focus, .textarea-field:focus { border-color: var(--primary); ring: 2px solid var(--primary); }
+    
+    /* Buttons */
+    .btn-action { 
+      background: var(--primary); color: white; border: none; 
+      padding: 12px 24px; border-radius: 8px; cursor: pointer; 
+      font-weight: 600; display: flex; align-items: center; gap: 8px; 
+      transition: 0.2s; justify-content: center; font-size: 14px; 
+    }
+    .btn-action:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-sm { padding: 8px 16px; font-size: 12px; height: auto; }
+    
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal-card { 
+      background: var(--header); 
+      width: 100%; max-width: 360px; 
+      border-radius: 16px; padding: 32px; 
+      position: relative; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); 
+      border: 1px solid var(--border);
+    }
+
+    /* Independent Modal Styles (No conflicts) */
+    .modal-input { 
+      width: 100%;
+      padding: 8px 12px; /* Decreased internal padding */
+      font-size: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--input-bg);
+      color: var(--text);
+      outline: none;
+      transition: 0.2s;
+      margin: 0; /* Reset margins */
+    }
+    .modal-input:focus { border-color: var(--primary); background: var(--card); }
+
+    .modal-btn { 
+      width: 100%;
+      background: var(--primary); color: white; border: none; 
+      padding: 10px; /* Decreased internal padding */
+      border-radius: 8px; cursor: pointer; 
+      font-weight: 600; display: flex; align-items: center; justify-content: center;
+      gap: 8px; transition: 0.2s; font-size: 14px;
+    }
+    .modal-btn:hover { opacity: 0.9; }
+
+    .auth-badge { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 99px; cursor: pointer; transition: 0.2s; }
+    .auth-badge:hover { background: var(--border); }
+    
+    .recipe-item { cursor: pointer; border-bottom: 1px solid var(--border); padding: 24px 0; }
+    .match-tag { font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 4px; background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+    
+    .pantry-subtabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 16px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .pantry-subtab { padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; border: 1px solid var(--border); background: var(--bg); color: var(--muted); transition: 0.2s; }
+    .pantry-subtab.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    /* Columns */
+    .columns-container { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .column {
+      background: var(--input-bg); border-radius: 12px; padding: 16px;
+      border: 1px solid var(--border);
+      display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start;
+    }
+    .column-header {
+      font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted);
+      text-align: center; margin-bottom: 12px; letter-spacing: 0.05em; width: 100%;
+    }
+
+    .ingredient-bubble {
+      font-size: 13px; padding: 6px 12px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 99px;
+      cursor: pointer; color: var(--text);
+      font-weight: 500; text-align: center; transition: 0.2s;
+      position: relative; user-select: none; margin: 0;
+    }
+    .ingredient-bubble:hover { border-color: var(--primary); color: var(--primary); }
+    .ingredient-bubble.custom { background: ${activeColors.tint}; border-color: transparent; color: var(--primary-dark); }
+
+    .delete-btn {
+      position: absolute; top: -6px; right: -6px;
+      background: #ef4444; color: white; border-radius: 50%;
+      width: 18px; height: 18px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+      z-index: 10;
+    }
+
+    /* Flex Utilities for non-Tailwind setups */
+    .edit-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 12px;
+      width: 100%;
+      flex-wrap: nowrap; /* Ensure they stay on one line */
+    }
+    .edit-group {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-mini {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      border: none;
+      display: flex; align-items: center;
+    }
+
+    /* Explicit Color Classes */
+    .bg-red-500 { background-color: #ef4444; color: white; }
+    .bg-slate-500 { background-color: #64748b; color: white; }
+    .bg-green-600 { background-color: #16a34a; color: white; }
+
+    /* Full Window Styles */
+    .full-window-overlay {
+      position: fixed; inset: 0; z-index: 2000;
+      background-color: #f3f4f6; /* Light Grey */
+      color: #000000;
+      display: flex; flex-direction: column;
+    }
+    .app-container.dark .full-window-overlay {
+      background-color: #4e342e; /* Brown */
+      color: #ffffff;
+    }
+    .fw-header {
+      flex: 0 0 auto;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 12px; /* Much smaller */
+      border-bottom: 1px solid var(--border);
+      background-color: var(--header); 
+      /* "header colors are okay as they are" so we keep var(--header) */
+    }
+    .fw-body {
+      flex: 1 1 auto;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+    .fw-col {
+      overflow-y: auto;
+      padding: 32px;
+      height: 100%;
+      font-size: 24px; /* 18pt */
+    }
+    .fw-item {
+        margin-bottom: 24px; /* Larger line spacing */
+        line-height: 1.5;
+    }
+    .fw-resizer {
+      width: 12px;
+      cursor: col-resize;
+      background-color: var(--border);
+      flex: 0 0 auto;
+      transition: background 0.2s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .fw-resizer:hover, .fw-resizer:active {
+      background-color: var(--primary);
+    }
+    .fw-resizer::after {
+      content: '⋮'; color: var(--muted); font-size: 14px;
+    }
+
+    /* Fixed Image Bottom Right */
+    .bg-bottom-right {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 250px;
+      height: auto;
+      z-index: -5;
+      opacity: 0.8;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      pointer-events: none;
+    }
+    @media (max-width: 768px) {
+        .bg-bottom-right {
+            width: 150px;
+            bottom: 10px;
+            right: 10px;
+            opacity: 0.5;
+        }
+    }
+
+    @media (min-width: 640px) {
+      .columns-container { grid-template-columns: 1fr 1fr 1fr; }
+      .header-content { flex-wrap: nowrap; padding: 16px 0; }
+      .header-actions { margin-left: auto; }
+      .logo { font-size: 24px; flex: 0 0 auto; margin-right: 0; }
+      .tabs { order: 0; width: auto; margin-top: 0; justify-content: center; }
+      .column { min-height: 300px; display: block; }
+      .ingredient-bubble { display: inline-block; margin-right: 6px; margin-bottom: 6px; }
+      .pantry-add-container { justify-content: flex-end; }
+    }
+    
+    /* Toggle Button Styles */
+    .theme-toggle, .color-toggle {
+        padding: 8px;
+        border-radius: 50%;
+        background: var(--input-bg);
+        border: 1px solid var(--border);
+        color: var(--text);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+    .theme-toggle:hover, .color-toggle:hover {
+        background: var(--border);
+    }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, [theme, colorTheme]);
+
+  // --- CORE LOGIC ---
+
+  const getSafeUid = (u) => String(u?.uid || 'guest').replace(/\//g, '_');
 
   const isIngredientAvailable = (recipeLine, availableSet) => {
     const lowerLine = String(recipeLine).toLowerCase();
@@ -306,7 +636,8 @@ const App = () => {
     .sort((a, b) => (b.percent || 0) - (a.percent || 0));
   }, [recipes, availableIngredients, search]);
 
-  // --- 3. HANDLERS (Defined BEFORE JSX) ---
+
+  // --- HANDLERS ---
 
   const handleTabChange = (tabId) => {
       setActiveTab(tabId);
@@ -701,8 +1032,6 @@ const App = () => {
       } catch (e) { console.error(e); }
   };
 
-  // --- RENDER HELPERS ---
-
   const renderColumn = (statusKey, title) => {
       const ingredients = MASTER_INGREDIENTS[activePantryCategory] || [];
       const masterItemsInColumn = ingredients.filter(name => {
@@ -745,322 +1074,7 @@ const App = () => {
       );
   };
 
-  // --- 4. EFFECTS ---
-
-  useEffect(() => {
-    // Theme Colors Logic
-    const colors = {
-      orange: { primary: '#fb923c', dark: '#ea580c', tint: 'rgba(251, 146, 60, 0.1)' },
-          blue: { primary: '#38bdf8', dark: '#0284c7', tint: 'rgba(56, 189, 248, 0.1)' }
-    };
-    const activeColors = colors[colorTheme];
-
-    const style = document.createElement('style');
-    style.innerHTML = `
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    
-    /* Default / Light Mode Scoped to App Container */
-    .app-container {
-      --primary: ${activeColors.primary};
-      --primary-dark: ${activeColors.dark};
-      --bg: transparent;
-      --card: rgba(255, 255, 255, 0.95);
-      --text: #1e293b;
-      --muted: #64748b;
-      --border: #e2e8f0;
-      --header: rgba(255, 255, 255, 0.98);
-      --input-bg: #f8fafc;
-    }
-
-    /* Dark Mode Scoped to App Container */
-    .app-container.dark {
-      --primary: ${activeColors.primary};
-      --primary-dark: ${activeColors.dark};
-      --bg: transparent;
-      --card: rgba(30, 41, 59, 0.95);
-      --text: #f1f5f9;
-      --muted: #94a3b8;
-      --border: #334155;
-      --header: rgba(15, 23, 42, 0.98);
-      --input-bg: rgba(255,255,255,0.05);
-    }
-
-    /* UTILITY CLASSES */
-    .text-primary { color: var(--primary); }
-
-    html, body {
-      margin: 0; padding: 0; min-height: 100%;
-    }
-    
-    /* Background logic */
-    .fixed-background { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: -10; background-color: #f8fafc; background-image: url('https://images.unsplash.com/photo-1495195134817-aeb325a55b65?q=80&w=1776&auto=format&fit=crop'); background-size: cover; background-position: center; background-attachment: fixed; }
-    .fixed-background::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.7); }
-    
-    /* Dark mode background override */
-    .app-container.dark .fixed-background { background-color: #0f172a; }
-    .app-container.dark .fixed-background::after { background: rgba(15, 23, 42, 0.85); }
-    
-    .app-container { width: 100%; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding-bottom: 80px; position: relative; overflow-x: hidden; color: var(--text); }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .animate-spin { animation: spin 1s linear infinite; }
-
-    /* Header Styles */
-    .header { width: 100%; position: sticky; top: 0; background: var(--header); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); z-index: 100; display: flex; justify-content: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-    .header-content {
-      width: 95%; max-width: 1000px; padding: 12px 0;
-      display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
-    }
-    .logo {
-      display: flex; align-items: center; gap: 8px; color: var(--primary);
-      flex: 1 0 auto; margin-right: auto;
-    }
-    .header-actions {
-      flex: 0 0 auto;
-      display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 8px;
-    }
-    .tabs {
-      display: flex; background: transparent; padding: 0; gap: 8px;
-      order: 3; width: 100%; overflow-x: auto; margin-top: 4px;
-      justify-content: flex-start;
-      -webkit-overflow-scrolling: touch; scrollbar-width: none;
-    }
-    .tab-btn {
-      padding: 8px 16px; border: 1px solid transparent; border-radius: 99px; cursor: pointer;
-      font-weight: 600; font-size: 13px; color: var(--muted); background: transparent;
-      transition: 0.2s; white-space: nowrap; flex: 0 0 auto;
-    }
-    .tab-btn.active { background: var(--input-bg); color: var(--text); border-color: var(--border); }
-
-    .main-content { width: 95%; max-width: 800px; margin: 0 auto; padding: 24px 0; position: relative; z-index: 1; }
-    .card { background: var(--card); border-radius: 16px; border: 1px solid var(--border); padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-    
-    /* Inputs */
-    .input-field, .textarea-field {
-      width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border);
-      background: var(--input-bg); color: var(--text); outline: none;
-      transition: 0.2s; font-family: inherit; font-size: 15px;
-    }
-    .input-field:focus, .textarea-field:focus { border-color: var(--primary); ring: 2px solid var(--primary); }
-    
-    /* Buttons */
-    .btn-action { 
-      background: var(--primary); color: white; border: none; 
-      padding: 12px 24px; border-radius: 8px; cursor: pointer; 
-      font-weight: 600; display: flex; align-items: center; gap: 8px; 
-      transition: 0.2s; justify-content: center; font-size: 14px; 
-    }
-    .btn-action:hover { opacity: 0.9; transform: translateY(-1px); }
-    .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-sm { padding: 8px 16px; font-size: 12px; height: auto; }
-    
-    /* Modal */
-    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
-    .modal-card { 
-      background: var(--header); 
-      width: 100%; max-width: 360px; 
-      border-radius: 16px; padding: 32px; 
-      position: relative; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); 
-      border: 1px solid var(--border);
-    }
-
-    /* Independent Modal Styles (No conflicts) */
-    .modal-input { 
-      width: 100%;
-      padding: 8px 12px; /* Decreased internal padding */
-      font-size: 14px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--input-bg);
-      color: var(--text);
-      outline: none;
-      transition: 0.2s;
-      margin: 0; /* Reset margins */
-    }
-    .modal-input:focus { border-color: var(--primary); background: var(--card); }
-
-    .modal-btn { 
-      width: 100%;
-      background: var(--primary); color: white; border: none; 
-      padding: 10px; /* Decreased internal padding */
-      border-radius: 8px; cursor: pointer; 
-      font-weight: 600; display: flex; align-items: center; justify-content: center;
-      gap: 8px; transition: 0.2s; font-size: 14px;
-    }
-    .modal-btn:hover { opacity: 0.9; }
-
-    .auth-badge { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 99px; cursor: pointer; transition: 0.2s; }
-    .auth-badge:hover { background: var(--border); }
-    
-    .recipe-item { cursor: pointer; border-bottom: 1px solid var(--border); padding: 24px 0; }
-    .match-tag { font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 4px; background: rgba(34, 197, 94, 0.1); color: #22c55e; }
-    
-    .pantry-subtabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 16px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-    .pantry-subtab { padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; border: 1px solid var(--border); background: var(--bg); color: var(--muted); transition: 0.2s; }
-    .pantry-subtab.active { background: var(--primary); color: white; border-color: var(--primary); }
-
-    /* Columns */
-    .columns-container { display: grid; grid-template-columns: 1fr; gap: 16px; }
-    .column {
-      background: var(--input-bg); border-radius: 12px; padding: 16px;
-      border: 1px solid var(--border);
-      display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start;
-    }
-    .column-header {
-      font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted);
-      text-align: center; margin-bottom: 12px; letter-spacing: 0.05em; width: 100%;
-    }
-
-    .ingredient-bubble {
-      font-size: 13px; padding: 6px 12px;
-      background: var(--card); border: 1px solid var(--border); border-radius: 99px;
-      cursor: pointer; color: var(--text);
-      font-weight: 500; text-align: center; transition: 0.2s;
-      position: relative; user-select: none; margin: 0;
-    }
-    .ingredient-bubble:hover { border-color: var(--primary); color: var(--primary); }
-    .ingredient-bubble.custom { background: ${activeColors.tint}; border-color: transparent; color: var(--primary-dark); }
-
-    .delete-btn {
-      position: absolute; top: -6px; right: -6px;
-      background: #ef4444; color: white; border-radius: 50%;
-      width: 18px; height: 18px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 10px; cursor: pointer;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-      z-index: 10;
-    }
-
-    /* Flex Utilities for non-Tailwind setups */
-    .edit-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 12px;
-      width: 100%;
-      flex-wrap: nowrap; /* Ensure they stay on one line */
-    }
-    .edit-group {
-      display: flex;
-      gap: 8px;
-    }
-    .btn-mini {
-      padding: 6px 12px;
-      font-size: 12px;
-      font-weight: 600;
-      border-radius: 8px;
-      cursor: pointer;
-      border: none;
-      display: flex; align-items: center;
-    }
-
-    /* Explicit Color Classes */
-    .bg-red-500 { background-color: #ef4444; color: white; }
-    .bg-slate-500 { background-color: #64748b; color: white; }
-    .bg-green-600 { background-color: #16a34a; color: white; }
-
-    /* Full Window Styles */
-    .full-window-overlay {
-      position: fixed; inset: 0; z-index: 2000;
-      background-color: #f3f4f6; /* Light Grey */
-      color: #000000;
-      display: flex; flex-direction: column;
-    }
-    .app-container.dark .full-window-overlay {
-      background-color: #4e342e; /* Brown */
-      color: #ffffff;
-    }
-    .fw-header {
-      flex: 0 0 auto;
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 6px 12px; /* Much smaller */
-      border-bottom: 1px solid var(--border);
-      background-color: var(--header); 
-      /* "header colors are okay as they are" so we keep var(--header) */
-    }
-    .fw-body {
-      flex: 1 1 auto;
-      display: flex;
-      overflow: hidden;
-      position: relative;
-    }
-    .fw-col {
-      overflow-y: auto;
-      padding: 32px;
-      height: 100%;
-      font-size: 24px; /* 18pt */
-    }
-    .fw-item {
-        margin-bottom: 24px; /* Larger line spacing */
-        line-height: 1.5;
-    }
-    .fw-resizer {
-      width: 12px;
-      cursor: col-resize;
-      background-color: var(--border);
-      flex: 0 0 auto;
-      transition: background 0.2s;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .fw-resizer:hover, .fw-resizer:active {
-      background-color: var(--primary);
-    }
-    .fw-resizer::after {
-      content: '⋮'; color: var(--muted); font-size: 14px;
-    }
-
-    /* Fixed Image Bottom Right */
-    .bg-bottom-right {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      width: 250px;
-      height: auto;
-      z-index: -5;
-      opacity: 0.8;
-      border-radius: 16px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-      pointer-events: none;
-    }
-    @media (max-width: 768px) {
-        .bg-bottom-right {
-            width: 150px;
-            bottom: 10px;
-            right: 10px;
-            opacity: 0.5;
-        }
-    }
-
-    @media (min-width: 640px) {
-      .columns-container { grid-template-columns: 1fr 1fr 1fr; }
-      .header-content { flex-wrap: nowrap; padding: 16px 0; }
-      .header-actions { margin-left: auto; }
-      .logo { font-size: 24px; flex: 0 0 auto; margin-right: 0; }
-      .tabs { order: 0; width: auto; margin-top: 0; justify-content: center; }
-      .column { min-height: 300px; display: block; }
-      .ingredient-bubble { display: inline-block; margin-right: 6px; margin-bottom: 6px; }
-      .pantry-add-container { justify-content: flex-end; }
-    }
-    
-    /* Toggle Button Styles */
-    .theme-toggle, .color-toggle {
-        padding: 8px;
-        border-radius: 50%;
-        background: var(--input-bg);
-        border: 1px solid var(--border);
-        color: var(--text);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s;
-    }
-    .theme-toggle:hover, .color-toggle:hover {
-        background: var(--border);
-    }
-    `;
-    document.head.appendChild(style);
-    return () => document.head.removeChild(style);
-  }, [theme, colorTheme]);
+  // --- EFFECTS ---
 
   useEffect(() => {
     if (fullScreenRecipe) {
@@ -1172,6 +1186,8 @@ const App = () => {
       <div className="fixed-background"></div>
       <img src="/mechef.png" alt="" className="bg-bottom-right" />
       
+      {/* ... (Previous Modals and Views) */}
+      
       {fullScreenRecipe && (
         <div className={`full-window-overlay ${theme === 'dark' ? 'dark' : ''}`}>
           <div className="fw-header">
@@ -1248,7 +1264,7 @@ const App = () => {
 
       {activeTab === 'recipes' && (
         <div className="card">
-          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.80</p></div>
+          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.81</p></div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
         {(scoredRecipes || []).map(recipe => {
