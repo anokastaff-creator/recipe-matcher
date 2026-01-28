@@ -3,14 +3,14 @@ import {
   ChefHat, Search, Loader2, Plus, CheckCircle, Trash2,
   Save as SaveIcon, User, X, Moon, Sun, RefreshCw, ClipboardType, AlignLeft, Edit2,
   Link as LinkIcon, Layers, Maximize2, Download, Upload, Copy, FileJson, Camera,
-  Palette, AlertTriangle
+  Palette
 } from 'lucide-react';
 
 // Firebase Imports
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getAuth, signInAnonymously, onAuthStateChanged,
-  signInWithCustomToken, GoogleAuthProvider, signInWithPopup,
+  signInWithCustomToken, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
   signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   updateProfile
 } from 'firebase/auth';
@@ -57,8 +57,6 @@ const initializeFirebase = () => {
     if (!getApps().length) {
       app = initializeApp(firebaseConfig);
       db = getFirestore(app);
-
-      // Simple persistence enable
       enableIndexedDbPersistence(db).catch((err) => {
           console.warn("Persistence failed:", err.code);
       });
@@ -200,6 +198,7 @@ const AutoTextarea = ({ value, onChange, className, placeholder }) => {
 };
 
 const App = () => {
+  // 1. STATE & REFS
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('recipes');
@@ -254,14 +253,7 @@ const App = () => {
   const [urlImportMode, setUrlImportMode] = useState(false);
   const [urlInput, setUrlInput] = useState('');
 
-  useEffect(() => {
-    console.log("App Mounted - v2.9.72");
-    const root = document.documentElement;
-  }, []);
-
-  // --- CORE LOGIC: DEFINED FIRST TO AVOID REFERENCE ERRORS ---
-
-  const getSafeUid = (u) => String(u?.uid || 'guest').replace(/\//g, '_');
+  // --- 2. CORE LOGIC (Defined BEFORE Usage) ---
 
   const isIngredientAvailable = (recipeLine, availableSet) => {
     const lowerLine = String(recipeLine).toLowerCase();
@@ -314,8 +306,7 @@ const App = () => {
     .sort((a, b) => (b.percent || 0) - (a.percent || 0));
   }, [recipes, availableIngredients, search]);
 
-
-  // --- HANDLERS ---
+  // --- 3. HANDLERS (Defined BEFORE JSX) ---
 
   const handleTabChange = (tabId) => {
       setActiveTab(tabId);
@@ -485,8 +476,29 @@ const App = () => {
           setAuthError("Offline Mode: Cloud sign-in unavailable.");
           return; 
       }
-      try { await signInWithPopup(fb.auth, fb.googleProvider); setIsAuthOpen(false); }
-      catch (e) { setAuthError(e.message || "Sign-in failed"); } finally { setIsAuthLoading(false); }
+      try { 
+          if (!fb.googleProvider) throw new Error("Google Auth Provider missing");
+          await signInWithPopup(fb.auth, fb.googleProvider); 
+          setIsAuthOpen(false); 
+      }
+      catch (e) { 
+          console.error("Auth Error:", e);
+          setAuthError(e.message || "Sign-in failed. Check popup blockers."); 
+      } 
+      finally { setIsAuthLoading(false); }
+    };
+    
+    // NEW: Handle Redirect Login (Bypass COOP)
+    const handleGoogleRedirectLogin = async () => {
+      setIsAuthLoading(true);
+      try {
+          if (!fb.googleProvider) throw new Error("Google Auth Provider missing");
+          await signInWithRedirect(fb.auth, fb.googleProvider);
+      } catch (e) {
+          console.error("Redirect Error:", e);
+          setAuthError("Redirect failed: " + e.message);
+          setIsAuthLoading(false);
+      }
     };
 
     const handleEmailAuth = async (e) => {
@@ -689,6 +701,8 @@ const App = () => {
       } catch (e) { console.error(e); }
   };
 
+  // --- RENDER HELPERS ---
+
   const renderColumn = (statusKey, title) => {
       const ingredients = MASTER_INGREDIENTS[activePantryCategory] || [];
       const masterItemsInColumn = ingredients.filter(name => {
@@ -731,7 +745,7 @@ const App = () => {
       );
   };
 
-  // --- EFFECTS ---
+  // --- 4. EFFECTS ---
 
   useEffect(() => {
     // Theme Colors Logic
@@ -1090,6 +1104,20 @@ const App = () => {
       if (!fb.initError) {
         initAuth();
         if (!fb.isDummyConfig) {
+            // Check if we are returning from a redirect flow
+            getRedirectResult(fb.auth)
+                .then((result) => {
+                    if (result && result.user) {
+                        setUser(result.user);
+                        setIsAuthOpen(false);
+                    }
+                })
+                .catch((error) => {
+                    console.error("Redirect Error:", error);
+                    setAuthError(error.message);
+                    setIsAuthOpen(true); // Keep modal open if error
+                });
+
           const unsubscribe = onAuthStateChanged(fb.auth, async (usr) => {
             if (!isMounted) return;
             if (usr) {
@@ -1144,8 +1172,6 @@ const App = () => {
       <div className="fixed-background"></div>
       <img src="/mechef.png" alt="" className="bg-bottom-right" />
       
-      {/* ... (Previous Modals and Views) */}
-      
       {fullScreenRecipe && (
         <div className={`full-window-overlay ${theme === 'dark' ? 'dark' : ''}`}>
           <div className="fw-header">
@@ -1166,8 +1192,12 @@ const App = () => {
       {deleteConfirmation && (<div className="modal-overlay" onClick={() => setDeleteConfirmation(null)}><div className="modal-card" onClick={e => e.stopPropagation()}><h2 className="text-lg font-bold mb-2">Delete?</h2><p className="text-sm text-muted mb-6">Permanently remove "{String(deleteConfirmation.name)}"?</p><div className="modal-actions"><button className="modal-btn-action bg-red" onClick={confirmDelete}>Delete</button><button className="modal-btn-action bg-gray" onClick={() => setDeleteConfirmation(null)}>Cancel</button></div></div></div>)}
 
       {isAuthOpen && (<div className="modal-overlay" onClick={() => setIsAuthOpen(false)}><div className="modal-card" onClick={e => e.stopPropagation()}><button className="absolute top-4 right-4 p-1 rounded-full hover:bg-slate-100 transition-colors text-muted" onClick={() => setIsAuthOpen(false)}><X size={18}/></button><div className="text-center mb-6"><h2 className="text-xl font-bold text-primary tracking-tight">RECIPE MATCH</h2><p className="text-sm text-muted mt-1">Sign in to sync</p></div>
-      {authError && <div className="text-red-500 text-xs mb-4 text-center">{String(authError)}</div>}
-      <form onSubmit={handleEmailAuth} className="w-full flex flex-col gap-6">{authMode === 'signup' && (<input className="modal-input" placeholder="Name" required value={authForm.name} onChange={e => setAuthForm({...authForm, name: e.target.value})}/>)}<input className="modal-input" type="email" placeholder="Email" required value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})}/><input className="modal-input" type="password" placeholder="Password" required value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})}/><button className="modal-btn mt-4" type="submit" disabled={isAuthLoading}>{isAuthLoading ? <Loader2 className="animate-spin" size={16}/> : (authMode === 'login' ? 'Log In' : 'Sign Up')}</button></form><div className="w-full flex items-center gap-3 my-4"><div className="h-px bg-border flex-1"></div><span className="text-[10px] text-muted font-bold uppercase">Or</span><div className="h-px bg-border flex-1"></div></div><button className="modal-btn" style={{background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)'}} onClick={handleGoogleLogin}>Google Sign In</button><div className="mt-4 text-center"><button className="text-sm text-muted hover:text-primary font-medium" onClick={() => setAuthMode(m => m === 'login' ? 'signup' : 'login')}>{authMode === 'login' ? "New? Create an account" : "Have an account? Log in"}</button></div></div></div>)}
+      {authError && <div className="text-red-500 text-xs mb-4 text-center border border-red-500/20 bg-red-500/10 p-2 rounded">{String(authError)}</div>}
+      <form onSubmit={handleEmailAuth} className="w-full flex flex-col gap-6">{authMode === 'signup' && (<input className="modal-input" placeholder="Name" required value={authForm.name} onChange={e => setAuthForm({...authForm, name: e.target.value})}/>)}<input className="modal-input" type="email" placeholder="Email" required value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})}/><input className="modal-input" type="password" placeholder="Password" required value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})}/><button className="modal-btn mt-4" type="submit" disabled={isAuthLoading}>{isAuthLoading ? <Loader2 className="animate-spin" size={16}/> : (authMode === 'login' ? 'Log In' : 'Sign Up')}</button></form><div className="w-full flex items-center gap-3 my-4"><div className="h-px bg-border flex-1"></div><span className="text-[10px] text-muted font-bold uppercase">Or</span><div className="h-px bg-border flex-1"></div></div>
+      <button className="modal-btn" style={{background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)'}} onClick={handleGoogleLogin}>Google Sign In</button>
+      {/* New Redirect Link */}
+      <div className="mt-4 text-center text-[10px] text-muted cursor-pointer hover:underline" onClick={handleGoogleRedirectLogin}>Problems? Try Redirect Sign-In</div>
+      <div className="mt-4 text-center"><button className="text-sm text-muted hover:text-primary font-medium" onClick={() => setAuthMode(m => m === 'login' ? 'signup' : 'login')}>{authMode === 'login' ? "New? Create an account" : "Have an account? Log in"}</button></div></div></div>)}
 
       <header className="header">
       <div className="header-content">
@@ -1218,7 +1248,7 @@ const App = () => {
 
       {activeTab === 'recipes' && (
         <div className="card">
-          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.72</p></div>
+          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.80</p></div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
         {(scoredRecipes || []).map(recipe => {
