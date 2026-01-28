@@ -200,6 +200,7 @@ const AutoTextarea = ({ value, onChange, className, placeholder }) => {
 };
 
 const App = () => {
+  // 1. STATE & REFS
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('recipes');
@@ -253,13 +254,53 @@ const App = () => {
   const cameraInputRef = useRef(null);
   const [urlImportMode, setUrlImportMode] = useState(false);
   const [urlInput, setUrlInput] = useState('');
-  
+
+  // NEW: Manual Offline Mode Toggle
+  const [isOfflineMode, setIsOfflineMode] = useState(() => {
+      if (typeof window !== 'undefined') return localStorage.getItem('rm_offline_mode') === 'true';
+      return false;
+  });
+
+  // Connection Settings State
+  const [forceLongPolling, setForceLongPolling] = useState(() => {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('rm_force_polling');
+        return stored === 'true';
+      }
+      return false;
+  });
+
+  // Debug Logs
+  const [debugLogs, setDebugLogs] = useState([]);
+  const [isOnline, setIsOnline] = useState(true);
+  const [isBlocked, setIsBlocked] = useState(false); 
+  const [showBlockInfo, setShowBlockInfo] = useState(false);
+  const [isCacheMode, setIsCacheMode] = useState(false);
+  const [hasPending, setHasPending] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('synced');
+
   // New States for Progress bars
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.85");
+    console.log("App Mounted - v2.9.86");
     const root = document.documentElement;
+    // CSP Injection attempt to fix Vercel Toolbar noise
+    const meta = document.createElement('meta');
+    meta.httpEquiv = "Content-Security-Policy";
+    meta.content = "worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data:;";
+    document.head.appendChild(meta);
+
+    // Network Listeners
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+    };
   }, []);
   
   // --- CSS Injection ---
@@ -871,9 +912,9 @@ const App = () => {
       setRawTextImport('');
     };
     
-    // NEW: Client-side image resizing
+    // NEW: Client-side image resizing - updated with error handling
     const resizeImage = (file, maxWidth = 1024) => {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = (event) => {
@@ -898,7 +939,9 @@ const App = () => {
                     // Return Base64 string directly (split header)
                     resolve(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
                 };
+                img.onerror = (e) => reject(new Error("Image load failed"));
             };
+            reader.onerror = (e) => reject(new Error("File read failed"));
         });
     };
 
@@ -938,6 +981,7 @@ const App = () => {
       const files = Array.from(e.target.files);
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (!files.length) return;
+      
       if (files.length === 1) {
           setIsAnalyzing(true);
           try {
@@ -955,19 +999,24 @@ const App = () => {
               alert("Error processing image.");
           } finally { setIsAnalyzing(false); }
       } else {
+        // Batch Processing
         setBatchProgress({ current: 0, total: files.length });
         setIsAnalyzing(true);
         const filesToProcess = [...files];
-        for (let i = 0; i < files.length; i++) {
-            setBatchProgress({ current: i + 1, total: files.length });
-            try {
-                // Resize
-                const base64Data = await resizeImage(files[i]);
-                
-                if(i > 0) await new Promise(r => setTimeout(r, 1000));
-                const recipeData = await getRecipeFromImage(base64Data);
-                if (recipeData) {
-                    try {
+        
+        // Wrap in try-finally to ensure spinner always stops
+        try {
+            for (let i = 0; i < filesToProcess.length; i++) {
+                setBatchProgress({ current: i + 1, total: filesToProcess.length });
+                try {
+                    // Resize
+                    const base64Data = await resizeImage(filesToProcess[i]);
+                    
+                    // Add delay between requests
+                    if(i > 0) await new Promise(r => setTimeout(r, 1000));
+                    
+                    const recipeData = await getRecipeFromImage(base64Data);
+                    if (recipeData) {
                         await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
                             name: recipeData.name,
                             ingredients: recipeData.ingredients,
@@ -975,13 +1024,17 @@ const App = () => {
                             source: "AI Batch Scan",
                             createdAt: Date.now()
                         });
-                    } catch (saveError) { console.error(saveError); }
+                    }
+                } catch (e) { 
+                    console.error("Error processing batch item " + i, e); 
+                    // Continue to next item on error
                 }
-            } catch (e) { console.error(e); }
+            }
+            setTimeout(() => setActiveTab('recipes'), 1000); 
+        } finally {
+            setIsAnalyzing(false);
+            setBatchProgress({ current: 0, total: 0 });
         }
-        setIsAnalyzing(false);
-        setBatchProgress({ current: 0, total: 0 });
-        setTimeout(() => setActiveTab('recipes'), 1000); 
       }
     };
 
@@ -1292,7 +1345,7 @@ const App = () => {
 
       {activeTab === 'recipes' && (
         <div className="card">
-          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.85</p></div>
+          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.86</p></div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
         {(scoredRecipes || []).map(recipe => {
