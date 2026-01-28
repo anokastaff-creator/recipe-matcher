@@ -258,7 +258,7 @@ const App = () => {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.84");
+    console.log("App Mounted - v2.9.85");
     const root = document.documentElement;
   }, []);
   
@@ -939,8 +939,6 @@ const App = () => {
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (!files.length) return;
       if (files.length === 1) {
-        // const reader = new FileReader(); // Removed old reader logic
-        // reader.onloadend = async () => { ... } // Replaced with resizeImage logic below
           setIsAnalyzing(true);
           try {
             // Resize image first
@@ -961,23 +959,25 @@ const App = () => {
         setIsAnalyzing(true);
         const filesToProcess = [...files];
         for (let i = 0; i < files.length; i++) {
-          setBatchProgress({ current: i + 1, total: filesToProcess.length });
-          try {
-            const base64Data = await resizeImage(files[i]);
-            if(i > 0) await new Promise(r => setTimeout(r, 1000));
-            const recipeData = await getRecipeFromImage(base64Data);
-            if (recipeData) {
-               try {
-                  await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
-                    name: recipeData.name,
-                    ingredients: recipeData.ingredients,
-                    instructions: recipeData.instructions,
-                    source: "AI Batch Scan",
-                    createdAt: Date.now()
-                  });
-               } catch (saveError) { console.error(saveError); }
-            }
-          } catch (e) { console.error(e); }
+            setBatchProgress({ current: i + 1, total: files.length });
+            try {
+                // Resize
+                const base64Data = await resizeImage(files[i]);
+                
+                if(i > 0) await new Promise(r => setTimeout(r, 1000));
+                const recipeData = await getRecipeFromImage(base64Data);
+                if (recipeData) {
+                    try {
+                        await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
+                            name: recipeData.name,
+                            ingredients: recipeData.ingredients,
+                            instructions: recipeData.instructions,
+                            source: "AI Batch Scan",
+                            createdAt: Date.now()
+                        });
+                    } catch (saveError) { console.error(saveError); }
+                }
+            } catch (e) { console.error(e); }
         }
         setIsAnalyzing(false);
         setBatchProgress({ current: 0, total: 0 });
@@ -1292,7 +1292,7 @@ const App = () => {
 
       {activeTab === 'recipes' && (
         <div className="card">
-          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.84</p></div>
+          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.85</p></div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
         {(scoredRecipes || []).map(recipe => {
