@@ -57,6 +57,8 @@ const initializeFirebase = () => {
     if (!getApps().length) {
       app = initializeApp(firebaseConfig);
       db = getFirestore(app);
+
+      // Simple persistence enable
       enableIndexedDbPersistence(db).catch((err) => {
           console.warn("Persistence failed:", err.code);
       });
@@ -256,14 +258,8 @@ const App = () => {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
-    console.log("App Mounted - v2.9.81");
-    // Ensure CSS root variables are set correctly on mount
+    console.log("App Mounted - v2.9.83");
     const root = document.documentElement;
-    // CSP Injection attempt to fix Vercel Toolbar noise
-    const meta = document.createElement('meta');
-    meta.httpEquiv = "Content-Security-Policy";
-    meta.content = "worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data:;";
-    document.head.appendChild(meta);
   }, []);
   
   // --- CSS Injection ---
@@ -874,6 +870,37 @@ const App = () => {
       setManual({ name: title, ings: ingredients.join('\n'), inst: instructions.join('\n'), source: "Manual Text Import" });
       setRawTextImport('');
     };
+    
+    // NEW: Client-side image resizing
+    const resizeImage = (file, maxWidth = 1024) => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > maxWidth) {
+                        height *= maxWidth / width;
+                        width = maxWidth;
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // Return Base64 string directly (split header)
+                    resolve(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+                };
+            };
+        });
+    };
 
     const getRecipeFromImage = async (base64Data) => {
       const prompt = `Extract the recipe from this image. Return valid JSON with these keys: "name" (string), "ingredients" (single string with newlines), "instructions" (single string with newlines). If no recipe is found, return null.`;
@@ -912,32 +939,33 @@ const App = () => {
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (!files.length) return;
       if (files.length === 1) {
-        const reader = new FileReader();
-        reader.onloadend = async () => {
+        // const reader = new FileReader(); // Removed old reader logic
+        // reader.onloadend = async () => { ... } // Replaced with resizeImage logic below
           setIsAnalyzing(true);
           try {
-            const data = await getRecipeFromImage(reader.result.split(',')[1]);
+            // Resize image first
+            const base64Data = await resizeImage(files[0]);
+            
+            const data = await getRecipeFromImage(base64Data);
             if (data) {
               setManual({ name: data.name, ings: data.ingredients, inst: data.instructions, source: "AI Photo Scan" });
+            } else {
+                alert("Failed to analyze image. Check your internet connection or try a smaller image.");
             }
-          } catch(err) { console.error(err); } finally { setIsAnalyzing(false); }
-        };
-        reader.readAsDataURL(files[0]);
+          } catch(err) { 
+              console.error(err); 
+              alert("Error processing image.");
+          } finally { setIsAnalyzing(false); }
       } else {
         setBatchProgress({ current: 0, total: files.length });
         setIsAnalyzing(true);
         const filesToProcess = [...files];
-        for (let i = 0; i < filesToProcess.length; i++) {
+        for (let i = 0; i < files.length; i++) {
           setBatchProgress({ current: i + 1, total: filesToProcess.length });
           try {
-            const base64 = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result.split(',')[1]);
-              reader.onerror = reject;
-              reader.readAsDataURL(filesToProcess[i]);
-            });
+            const base64Data = await resizeImage(files[i]);
             if(i > 0) await new Promise(r => setTimeout(r, 1000));
-            const recipeData = await getRecipeFromImage(base64);
+            const recipeData = await getRecipeFromImage(base64Data);
             if (recipeData) {
                try {
                   await addDoc(collection(fb.db, 'artifacts', appId, 'users', user.uid, 'recipes'), {
@@ -1264,7 +1292,7 @@ const App = () => {
 
       {activeTab === 'recipes' && (
         <div className="card">
-          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.81</p></div>
+          <div className="text-center mb-8"><h1 className="text-3xl font-black text-primary tracking-tight">RECIPE MATCH</h1><p className="text-xs text-muted font-mono">v2.9.83</p></div>
         <div className="flex gap-4 mb-6"><Search size={20} className="text-muted"/><input className="input-field" style={{border:'none',background:'none',padding:0}} placeholder="Search recipes..." value={search} onChange={e => setSearch(e.target.value)}/></div>
         <div className="divide-y divide-border/50">
         {(scoredRecipes || []).map(recipe => {
